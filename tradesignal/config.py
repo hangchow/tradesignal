@@ -21,6 +21,7 @@ class EmailNotificationConfig:
     to_addresses: tuple[str, ...] = field(default_factory=tuple)
     subject_prefix: str = "[tradesignal]"
     use_tls: bool = True
+    use_ssl: bool = False
 
 
 @dataclass(frozen=True)
@@ -96,6 +97,7 @@ def load_config(path: str | Path) -> AppConfig:
         to_addresses=to_addresses,
         subject_prefix=str(email_raw.get("subject_prefix", "[tradesignal]")).strip() or "[tradesignal]",
         use_tls=bool(email_raw.get("use_tls", True)),
+        use_ssl=bool(email_raw.get("use_ssl", False)),
     )
 
     return AppConfig(

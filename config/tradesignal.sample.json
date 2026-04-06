@@ -21,7 +21,8 @@
         "you@example.com"
       ],
       "subject_prefix": "[tradesignal]",
-      "use_tls": true
+      "use_tls": true,
+      "use_ssl": false
     }
   }
 }

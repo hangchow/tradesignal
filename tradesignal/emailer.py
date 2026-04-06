@@ -24,9 +24,10 @@ def send_email_notification(config: EmailNotificationConfig, *, subject: str, bo
     message.set_content(body)
 
     password = config.password or (os.environ.get(config.password_env, "") if config.password_env else "")
-    with smtplib.SMTP(config.smtp_host, config.smtp_port, timeout=30) as smtp:
+    smtp_factory = smtplib.SMTP_SSL if config.use_ssl else smtplib.SMTP
+    with smtp_factory(config.smtp_host, config.smtp_port, timeout=30) as smtp:
         smtp.ehlo()
-        if config.use_tls:
+        if config.use_tls and not config.use_ssl:
             smtp.starttls()
             smtp.ehlo()
         if config.username:
