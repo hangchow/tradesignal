@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tradesignal"
+version = "0.1.0"
+description = "Minimal dual momentum signal notifier."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas",
+]
+
+[project.scripts]
+tradesignal = "tradesignal.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["tradesignal*"]

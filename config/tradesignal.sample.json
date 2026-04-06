@@ -1,0 +1,42 @@
+{
+  "stock_pool": {
+    "codes": [
+      "US.MSFT",
+      "US.NVDA",
+      "US.GOOG",
+      "US.AAPL",
+      "US.VOO"
+    ],
+    "data_root": "/path/to/kline_day"
+  },
+  "strategy": {
+    "name": "dual_momentum",
+    "params": {
+      "lookback_days": 90,
+      "long_lookback_days": 180,
+      "long_lookback_weight": 0.25,
+      "top_n": 1,
+      "volume_window": 20,
+      "min_volume_ratio": 1.3,
+      "market_filter_window": 120,
+      "volatility_window": 20,
+      "target_annual_vol": 0.3,
+      "max_gross_exposure": 1.0
+    }
+  },
+  "notification": {
+    "email": {
+      "enabled": false,
+      "smtp_host": "smtp.example.com",
+      "smtp_port": 587,
+      "username": "bot@example.com",
+      "password_env": "TRADESIGNAL_EMAIL_PASSWORD",
+      "from": "bot@example.com",
+      "to": [
+        "you@example.com"
+      ],
+      "subject_prefix": "[tradesignal]",
+      "use_tls": true
+    }
+  }
+}
