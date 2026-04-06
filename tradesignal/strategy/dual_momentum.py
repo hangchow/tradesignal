@@ -77,6 +77,9 @@ class DualMomentumSignal:
     gross_exposure: float
     market_is_risk_on: bool
     candidate_codes: tuple[str, ...]
+    least_preferred_code: str | None
+    recommendation_reason: str
+    least_preferred_reason: str
 
 
 def select_target_codes(momentum: pd.Series, top_n: int) -> list[str]:
@@ -93,6 +96,74 @@ def compute_volume_boost(volume_ratio: pd.Series, min_volume_ratio: float) -> pd
     boosted = capped_ratio >= min_volume_ratio
     volume_boost.loc[boosted] = capped_ratio.loc[boosted] / min_volume_ratio
     return volume_boost.where(volume_ratio.notna())
+
+
+def _format_percent(value: float | None) -> str:
+    if value is None or pd.isna(value):
+        return "n/a"
+    return f"{value * 100:.1f}%"
+
+
+def _format_ratio(value: float | None) -> str:
+    if value is None or pd.isna(value):
+        return "n/a"
+    return f"{value:.2f}x"
+
+
+def _build_recommendation_reason(
+    *,
+    candidate_codes: tuple[str, ...],
+    target_codes: tuple[str, ...],
+    market_is_risk_on: bool,
+    top_weighted_momentum: float | None,
+    top_blended_momentum: float | None,
+    top_volume_ratio: float | None,
+    pool_close: float,
+    pool_ma: float,
+    params: DualMomentumParams,
+) -> str:
+    if target_codes:
+        leader = target_codes[0]
+        return (
+            f"{leader} 加权动量最高({ _format_percent(top_weighted_momentum) })，"
+            f"综合动量为正({ _format_percent(top_blended_momentum) })，"
+            f"量比 { _format_ratio(top_volume_ratio) }，股票池位于 {params.market_filter_window} 日均线上方。"
+        )
+    if candidate_codes:
+        leader = candidate_codes[0]
+        return (
+            f"{leader} 虽然是最强候选(加权动量 { _format_percent(top_weighted_momentum) })，"
+            f"但股票池均值 {pool_close:.2f} 低于 {params.market_filter_window} 日均线 {pool_ma:.2f}，"
+            "触发 risk_off，当前推荐 CASH。"
+        )
+    market_clause = (
+        f"股票池位于 {params.market_filter_window} 日均线上方。"
+        if market_is_risk_on
+        else f"股票池均值 {pool_close:.2f} 低于 {params.market_filter_window} 日均线 {pool_ma:.2f}。"
+    )
+    return f"当前没有标的进入正动量候选，{market_clause} 推荐保持 CASH。"
+
+
+def _build_least_preferred_reason(
+    *,
+    code: str | None,
+    blended_momentum: float | None,
+    short_momentum: float | None,
+    long_momentum: float | None,
+    volume_ratio: float | None,
+    params: DualMomentumParams,
+) -> str:
+    if not code:
+        return "无可用标的可评估。"
+
+    clauses = [f"{code} 综合动量最弱({ _format_percent(blended_momentum) })"]
+    if short_momentum is not None and not pd.isna(short_momentum) and short_momentum <= 0:
+        clauses.append(f"短周期动量为负({ _format_percent(short_momentum) })")
+    if params.long_lookback_weight > 0 and long_momentum is not None and not pd.isna(long_momentum) and long_momentum <= 0:
+        clauses.append(f"长周期动量也偏弱({ _format_percent(long_momentum) })")
+    if volume_ratio is not None and not pd.isna(volume_ratio) and volume_ratio < params.min_volume_ratio:
+        clauses.append(f"量比 { _format_ratio(volume_ratio) } 低于阈值 {params.min_volume_ratio:.2f}x")
+    return "，".join(clauses) + "。"
 
 
 def validate_dual_momentum_params(
@@ -334,6 +405,22 @@ def build_dual_momentum_signal_history(
         target_codes = candidate_codes if market_is_risk_on else ()
         gross_exposure = float(target_vol_multiplier.iloc[index] * resolved.max_gross_exposure) if target_codes else 0.0
         weight_per_code = gross_exposure / len(target_codes) if target_codes else 0.0
+        weighted_row = weighted_momentum.iloc[index].dropna()
+        blended_row = blended_momentum.iloc[index].dropna()
+        relative_volume_row = relative_volume.iloc[index].dropna()
+        short_row = short_momentum.iloc[index].dropna()
+        long_row = long_momentum.iloc[index].dropna()
+        least_preferred_code = blended_row.sort_values(ascending=True).index[0] if not blended_row.empty else None
+        lead_code = candidate_codes[0] if candidate_codes else None
+        top_weighted_momentum = float(weighted_row.loc[lead_code]) if lead_code in weighted_row.index else None
+        top_blended_momentum = float(blended_row.loc[lead_code]) if lead_code in blended_row.index else None
+        top_volume_ratio = float(relative_volume_row.loc[lead_code]) if lead_code in relative_volume_row.index else None
+        least_blended_momentum = float(blended_row.loc[least_preferred_code]) if least_preferred_code in blended_row.index else None
+        least_short_momentum = float(short_row.loc[least_preferred_code]) if least_preferred_code in short_row.index else None
+        least_long_momentum = float(long_row.loc[least_preferred_code]) if least_preferred_code in long_row.index else None
+        least_volume_ratio = (
+            float(relative_volume_row.loc[least_preferred_code]) if least_preferred_code in relative_volume_row.index else None
+        )
         signals.append(
             DualMomentumSignal(
                 completed_trade_date=trade_date,
@@ -342,6 +429,26 @@ def build_dual_momentum_signal_history(
                 gross_exposure=gross_exposure,
                 market_is_risk_on=market_is_risk_on,
                 candidate_codes=candidate_codes,
+                least_preferred_code=least_preferred_code,
+                recommendation_reason=_build_recommendation_reason(
+                    candidate_codes=candidate_codes,
+                    target_codes=target_codes,
+                    market_is_risk_on=market_is_risk_on,
+                    top_weighted_momentum=top_weighted_momentum,
+                    top_blended_momentum=top_blended_momentum,
+                    top_volume_ratio=top_volume_ratio,
+                    pool_close=float(pool_close.iloc[index]),
+                    pool_ma=float(pool_ma.iloc[index]) if pd.notna(pool_ma.iloc[index]) else float("nan"),
+                    params=resolved,
+                ),
+                least_preferred_reason=_build_least_preferred_reason(
+                    code=least_preferred_code,
+                    blended_momentum=least_blended_momentum,
+                    short_momentum=least_short_momentum,
+                    long_momentum=least_long_momentum,
+                    volume_ratio=least_volume_ratio,
+                    params=resolved,
+                ),
             )
         )
 

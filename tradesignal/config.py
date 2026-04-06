@@ -5,6 +5,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+DEFAULT_STRATEGY_CONFIG_RELATIVE_PATH = Path("config/strategy_config.default.json")
+DEFAULT_STRATEGY_CONFIG_PATH = (Path(__file__).resolve().parent.parent / DEFAULT_STRATEGY_CONFIG_RELATIVE_PATH).resolve()
+
 
 @dataclass(frozen=True)
 class EmailNotificationConfig:
@@ -40,7 +43,6 @@ class StockPoolConfig:
 @dataclass(frozen=True)
 class AppConfig:
     stock_pool: StockPoolConfig
-    strategy: StrategyConfig
     notification: NotificationConfig = field(default_factory=NotificationConfig)
 
 
@@ -64,18 +66,6 @@ def load_config(path: str | Path) -> AppConfig:
     data_root = Path(data_root_raw)
     if not data_root.is_absolute():
         data_root = (config_path.parent / data_root).resolve()
-
-    strategy_raw = payload.get("strategy")
-    if not isinstance(strategy_raw, dict):
-        raise ValueError("strategy must be an object")
-    strategy_name = str(strategy_raw.get("name", "")).strip()
-    if strategy_name != "dual_momentum":
-        raise ValueError("strategy.name must be dual_momentum")
-    strategy_params = strategy_raw.get("params", {})
-    if strategy_params is None:
-        strategy_params = {}
-    if not isinstance(strategy_params, dict):
-        raise ValueError("strategy.params must be an object")
 
     notification_raw = payload.get("notification", {})
     if notification_raw is None:
@@ -110,9 +100,59 @@ def load_config(path: str | Path) -> AppConfig:
 
     return AppConfig(
         stock_pool=StockPoolConfig(codes=codes, data_root=data_root),
-        strategy=StrategyConfig(name=strategy_name, params=dict(strategy_params)),
         notification=NotificationConfig(email=email),
     )
+
+
+def load_strategy_config(path: str | Path, *, base: StrategyConfig | None = None) -> StrategyConfig:
+    strategy_config_path = Path(path)
+    payload = json.loads(strategy_config_path.read_text(encoding="utf-8"))
+    if base is None:
+        return _parse_strategy_config(payload, prefix="strategy config")
+    return _merge_strategy_config(base, payload, prefix="strategy config")
+
+
+def load_default_strategy_config() -> StrategyConfig:
+    return load_strategy_config(DEFAULT_STRATEGY_CONFIG_PATH)
+
+
+def _parse_strategy_config(payload: object, *, prefix: str = "strategy") -> StrategyConfig:
+    if payload is None:
+        raise ValueError(f"{prefix} must be an object")
+    if not isinstance(payload, dict):
+        raise ValueError(f"{prefix} must be an object")
+
+    strategy_name = str(payload.get("name", "")).strip()
+    if strategy_name != "dual_momentum":
+        raise ValueError(f"{prefix}.name must be dual_momentum")
+
+    strategy_params = payload.get("params", {})
+    if strategy_params is None:
+        strategy_params = {}
+    if not isinstance(strategy_params, dict):
+        raise ValueError(f"{prefix}.params must be an object")
+    return StrategyConfig(name=strategy_name, params=dict(strategy_params))
+
+
+def _merge_strategy_config(base: StrategyConfig, payload: object, *, prefix: str = "strategy") -> StrategyConfig:
+    if payload is None:
+        raise ValueError(f"{prefix} must be an object")
+    if not isinstance(payload, dict):
+        raise ValueError(f"{prefix} must be an object")
+
+    strategy_name = str(payload.get("name", base.name)).strip()
+    if strategy_name != "dual_momentum":
+        raise ValueError(f"{prefix}.name must be dual_momentum")
+
+    override_params = payload.get("params", {})
+    if override_params is None:
+        override_params = {}
+    if not isinstance(override_params, dict):
+        raise ValueError(f"{prefix}.params must be an object")
+
+    merged_params = dict(base.params)
+    merged_params.update(override_params)
+    return StrategyConfig(name=strategy_name, params=merged_params)
 
 
 def _optional_string(value: object) -> str | None:

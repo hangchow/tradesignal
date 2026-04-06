@@ -1,20 +1,6 @@
 # tradesignal
 
-一个最小的 `dual_momentum` 股票池信号通知项目。
-
-它只做这几件事：
-
-- 从本地 `kline_day/<code>/*.csv` 读取日线
-- 运行 `dual_momentum` 策略
-- 输出当前推荐目标或 `CASH`
-- 可选通过 SMTP 发邮件
-
-它不做这些事：
-
-- 不连接 `futu`
-- 不读取真实账户
-- 不分析当前持仓
-- 不自动下单
+基于本地日线数据的股票信号邮件通知工具。
 
 ## 安装
 
@@ -28,7 +14,7 @@ python3 -m venv .venv
 复制一份样例配置：
 
 ```bash
-cp config/tradesignal.sample.json config/tradesignal.json
+cp config/tradesignal.sample.json your_path/tradesignal.json
 ```
 
 至少改这几项：
@@ -37,67 +23,35 @@ cp config/tradesignal.sample.json config/tradesignal.json
 - `stock_pool.data_root`
 - `notification.email.*`
 
-如果不想发邮件，只想先看终端输出：
-
-- 把 `notification.email.enabled` 改成 `false`
+邮件密码可以直接写在 `notification.email.password` 里。
+如果不想发邮件，把 `notification.email.enabled` 改成 `false`。
 
 ## 手动运行
 
 ```bash
-./.venv/bin/python -m tradesignal --config config/tradesignal.json
+./.venv/bin/python -m tradesignal --config your_path/tradesignal.json
 ```
 
 只打印，不发邮件：
 
 ```bash
-./.venv/bin/python -m tradesignal --config config/tradesignal.json --no-email
+./.venv/bin/python -m tradesignal --config your_path/tradesignal.json --no-email
 ```
 
-## 定时运行
+启动时程序默认会先用 Polygon 增量补齐 `stock_pool.data_root` 下的美股日线数据，再继续算信号。
+如果抓取失败，程序会直接报错退出。
+需要提前设置环境变量：
 
-最简单是用 `cron`。
-
-例如美东开盘后每天跑一次：
-
-```cron
-35 21 * * 1-5 cd /Users/sean/workspace/tradesignal && /Users/sean/workspace/tradesignal/.venv/bin/python -m tradesignal --config config/tradesignal.json >> /tmp/tradesignal.log 2>&1
+```bash
+export POLYGON_API_KEY=your_api_key
 ```
 
-上面这个时间是按机器本地时区写的，实际部署时请按你的机器时区自行调整。
+如果不想启动时联网抓取，可以加：
 
-## 数据格式
-
-每个股票一个目录：
-
-```text
-kline_day/
-  US.MSFT/
-    US.MSFT_2026-03-30.csv
-    US.MSFT_2026-04-06.csv
-  US.NVDA/
-    US.NVDA_2026-03-30.csv
+```bash
+./.venv/bin/python -m tradesignal --config your_path/tradesignal.json --skip-fetch
 ```
 
-CSV 至少要有这些列：
+## 进阶
 
-- `time_key`
-- `close`
-- `volume`
-
-## 邮件内容
-
-当前邮件会包含：
-
-- 已完成交易日
-- 股票池
-- 推荐目标
-- 备选候选
-- 风险状态
-- 总仓位倍率
-
-当前不会包含：
-
-- “你当前该卖出谁”
-- “你当前该买多少股”
-
-因为这个项目不读取你的真实持仓。
+策略默认配置、自定义策略覆盖、定时运行、数据格式和邮件内容见 [docs/advanced.md](docs/advanced.md)。

@@ -1,0 +1,291 @@
+from __future__ import annotations
+
+import json
+import os
+import ssl
+import time as sleep_time
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
+from functools import lru_cache
+from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.request import urlopen
+from zoneinfo import ZoneInfo
+
+import exchange_calendars as xcals
+import pandas as pd
+
+
+BASE_URL = "https://api.polygon.io/v2/aggs/ticker"
+DEFAULT_RATE_LIMIT_SECONDS = 13.0
+DEFAULT_BOOTSTRAP_DAYS = 730
+MARKET_DAILY_BAR_READY_DELAY = timedelta(hours=2)
+NEW_YORK = ZoneInfo("America/New_York")
+LOCAL_COLUMNS = ["time_key", "open", "close", "high", "low", "volume"]
+
+
+@dataclass(frozen=True)
+class PolygonFetchConfig:
+    api_key: str | None = None
+    rate_limit_seconds: float = DEFAULT_RATE_LIMIT_SECONDS
+    insecure: bool = False
+
+    @classmethod
+    def from_env(cls) -> "PolygonFetchConfig":
+        return cls(api_key=os.environ.get("POLYGON_API_KEY"))
+
+
+def refresh_daily_data(
+    data_root: Path,
+    codes: list[str] | tuple[str, ...],
+    *,
+    fetch_config: PolygonFetchConfig | None = None,
+) -> None:
+    config = fetch_config or PolygonFetchConfig.from_env()
+    if not config.api_key:
+        raise ValueError("missing Polygon API key; set POLYGON_API_KEY or pass --skip-fetch")
+
+    us_symbols = normalize_us_symbols(codes)
+    if not us_symbols:
+        raise ValueError("no supported US symbols found in stock_pool.codes")
+
+    start_date, end_date = resolve_refresh_window(data_root, us_symbols)
+    if start_date > end_date:
+        print(f"FETCH_SKIPPED start={start_date.isoformat()} end={end_date.isoformat()} reason=up_to_date", flush=True)
+        return
+
+    print(
+        f"FETCHING_POLYGON start={start_date.isoformat()} end={end_date.isoformat()} symbols={len(us_symbols)} data_root={data_root}",
+        flush=True,
+    )
+    fetch_and_store_history(
+        data_root=data_root,
+        symbols=us_symbols,
+        start_date=start_date,
+        end_date=end_date,
+        api_key=config.api_key,
+        rate_limit_seconds=config.rate_limit_seconds,
+        insecure=config.insecure,
+    )
+
+
+def normalize_us_symbols(codes: list[str] | tuple[str, ...]) -> list[str]:
+    symbols: list[str] = []
+    for code in codes:
+        value = str(code).strip().upper()
+        if not value or not value.startswith("US."):
+            continue
+        symbols.append(value.removeprefix("US."))
+    return symbols
+
+
+def resolve_refresh_window(data_root: Path, symbols: list[str]) -> tuple[date, date]:
+    latest_dates: list[date] = []
+    for symbol in symbols:
+        latest_date = get_latest_local_trade_date(data_root / f"US.{symbol}")
+        if latest_date is not None:
+            latest_dates.append(latest_date)
+
+    latest_completed_trade_date = expected_latest_us_trade_date(datetime.now(NEW_YORK))
+    if latest_dates:
+        start_date = next_us_trade_date(min(latest_dates))
+    else:
+        start_date = latest_completed_trade_date - timedelta(days=DEFAULT_BOOTSTRAP_DAYS)
+    return start_date, latest_completed_trade_date
+
+
+@lru_cache(maxsize=1)
+def us_market_calendar():
+    return xcals.get_calendar("XNYS")
+
+
+def expected_latest_us_trade_date(now: datetime) -> date:
+    calendar = us_market_calendar()
+    current = now.astimezone(NEW_YORK)
+    current_session_label = pd.Timestamp(current.date())
+    if calendar.is_session(current_session_label):
+        current_session_close = calendar.session_close(current_session_label).tz_convert(NEW_YORK)
+        if current >= current_session_close + MARKET_DAILY_BAR_READY_DELAY:
+            return current.date()
+        return pd.Timestamp(calendar.previous_session(current_session_label)).date()
+    return pd.Timestamp(calendar.date_to_session(current_session_label, direction="previous")).date()
+
+
+def next_us_trade_date(current_date: date) -> date:
+    calendar = us_market_calendar()
+    current_session_label = pd.Timestamp(current_date)
+    if calendar.is_session(current_session_label):
+        return pd.Timestamp(calendar.next_session(current_session_label)).date()
+    return pd.Timestamp(calendar.date_to_session(current_session_label, direction="next")).date()
+
+
+def get_latest_local_trade_date(output_root: Path) -> date | None:
+    latest: date | None = None
+    for path in sorted(output_root.glob("*.csv")):
+        try:
+            history = pd.read_csv(path, usecols=["time_key"])
+        except (FileNotFoundError, pd.errors.EmptyDataError):
+            continue
+        if history.empty:
+            continue
+        candidate = pd.to_datetime(history["time_key"]).max().date()
+        if latest is None or candidate > latest:
+            latest = candidate
+    return latest
+
+
+def fetch_and_store_history(
+    *,
+    data_root: Path,
+    symbols: list[str],
+    start_date: date,
+    end_date: date,
+    api_key: str,
+    rate_limit_seconds: float,
+    insecure: bool,
+) -> None:
+    for index, symbol in enumerate(symbols):
+        code = f"US.{symbol}"
+        output_root = data_root / code
+        history = fetch_history(
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
+            adjusted=True,
+            api_key=api_key,
+            insecure=insecure,
+        )
+        if history.empty:
+            print(f"FETCH_EMPTY code={code} start={start_date.isoformat()} end={end_date.isoformat()}", flush=True)
+        else:
+            file_count, _ = save_weekly_files(
+                history=history,
+                output_root=output_root,
+                code=code,
+                keep_existing=True,
+            )
+            print(
+                "FETCHED "
+                f"code={code} rows={len(history)} start={history.iloc[0]['time_key'][:10]} "
+                f"end={history.iloc[-1]['time_key'][:10]} weekly_files={file_count}",
+                flush=True,
+            )
+
+        if index + 1 < len(symbols):
+            sleep_time.sleep(rate_limit_seconds)
+
+
+def build_url(symbol: str, start_date: date, end_date: date, adjusted: bool, api_key: str) -> str:
+    query = urlencode({"adjusted": str(adjusted).lower(), "sort": "asc", "limit": 50000, "apiKey": api_key})
+    return f"{BASE_URL}/{symbol}/range/1/day/{start_date.isoformat()}/{end_date.isoformat()}?{query}"
+
+
+def with_api_key(url: str, api_key: str) -> str:
+    parsed = urlparse(url)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    query.setdefault("apiKey", api_key)
+    return urlunparse(parsed._replace(query=urlencode(query)))
+
+
+def open_json(url: str, insecure: bool) -> dict:
+    ssl_context = ssl._create_unverified_context() if insecure else None
+    with urlopen(url, context=ssl_context, timeout=60) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def fetch_range(symbol: str, start_date: date, end_date: date, adjusted: bool, api_key: str, insecure: bool) -> pd.DataFrame:
+    url = build_url(symbol, start_date, end_date, adjusted, api_key)
+    results: list[dict] = []
+    while url:
+        payload = open_json(url, insecure=insecure)
+        status = payload.get("status")
+        if status not in {"OK", "DELAYED"}:
+            detail = payload.get("error") or payload.get("message") or payload
+            raise RuntimeError(str(detail))
+        results.extend(payload.get("results", []))
+        next_url = payload.get("next_url")
+        url = with_api_key(next_url, api_key) if next_url else ""
+    return pd.DataFrame(results)
+
+
+def convert_to_local_layout(history: pd.DataFrame) -> pd.DataFrame:
+    if history.empty:
+        return pd.DataFrame(columns=LOCAL_COLUMNS)
+
+    rows: list[dict[str, object]] = []
+    for item in history.sort_values("t").to_dict("records"):
+        trade_date = datetime.fromtimestamp(item["t"] / 1000, tz=NEW_YORK).date()
+        rows.append(
+            {
+                "time_key": pd.Timestamp(trade_date).strftime("%Y-%m-%d %H:%M:%S"),
+                "open": item["o"],
+                "close": item["c"],
+                "high": item["h"],
+                "low": item["l"],
+                "volume": int(item["v"]),
+            }
+        )
+    local = pd.DataFrame(rows, columns=LOCAL_COLUMNS)
+    local = local.drop_duplicates(subset=["time_key"], keep="last").reset_index(drop=True)
+    return local
+
+
+def fetch_history(
+    symbol: str,
+    start_date: date,
+    end_date: date,
+    adjusted: bool,
+    api_key: str,
+    insecure: bool,
+) -> pd.DataFrame:
+    history = fetch_range(symbol, start_date, end_date, adjusted, api_key, insecure)
+    return convert_to_local_layout(history)
+
+
+def merge_weekly_payload(file_path: Path, weekly: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    incoming = weekly.loc[:, columns].copy()
+    if not file_path.exists():
+        return incoming
+
+    try:
+        existing = pd.read_csv(file_path, usecols=lambda column: column in columns)
+    except pd.errors.EmptyDataError:
+        existing = pd.DataFrame(columns=columns)
+
+    if existing.empty:
+        return incoming
+
+    merged = pd.concat([existing, incoming], ignore_index=True)
+    merged["time_key"] = pd.to_datetime(merged["time_key"])
+    merged = merged.sort_values("time_key").drop_duplicates(subset=["time_key"], keep="last").reset_index(drop=True)
+    merged["time_key"] = merged["time_key"].dt.strftime("%Y-%m-%d %H:%M:%S")
+    return merged.loc[:, columns]
+
+
+def save_weekly_files(history: pd.DataFrame, output_root: Path, code: str, keep_existing: bool) -> tuple[int, int]:
+    output_root.mkdir(parents=True, exist_ok=True)
+    dated = history.copy()
+    dated["trade_date"] = pd.to_datetime(dated["time_key"]).dt.normalize()
+    dated["week_start"] = dated["trade_date"] - pd.to_timedelta(dated["trade_date"].dt.weekday, unit="D")
+
+    written_names: set[str] = set()
+    file_count = 0
+    for week_start, weekly in dated.groupby("week_start", sort=True):
+        weekly_path = output_root / f"{code}_{week_start.date().isoformat()}.csv"
+        merged_weekly = merge_weekly_payload(weekly_path, weekly, LOCAL_COLUMNS)
+        merged_weekly.to_csv(weekly_path, index=False)
+        written_names.add(weekly_path.name)
+        file_count += 1
+
+    removed_count = 0 if keep_existing else remove_stale_weekly_files(output_root, code, written_names)
+    return file_count, removed_count
+
+
+def remove_stale_weekly_files(output_root: Path, code: str, keep_names: set[str]) -> int:
+    removed_count = 0
+    for path in output_root.glob(f"{code}_*.csv"):
+        if path.name in keep_names:
+            continue
+        path.unlink()
+        removed_count += 1
+    return removed_count
