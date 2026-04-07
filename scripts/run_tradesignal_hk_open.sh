@@ -8,6 +8,15 @@ CONFIG_PATH="${HOME}/config/tradesignal_hk.json"
 
 cd "${PROJECT_ROOT}"
 
+current_branch="$(git -C "${PROJECT_ROOT}" branch --show-current 2>/dev/null || true)"
+if [[ "${current_branch}" == "main" ]]; then
+  if ! git -C "${PROJECT_ROOT}" pull --ff-only origin main; then
+    echo "git pull failed, continuing with existing local code" >&2
+  fi
+else
+  echo "git pull skipped: current branch is '${current_branch:-unknown}', expected 'main'" >&2
+fi
+
 if [[ ! -x "${PYTHON_BIN}" ]]; then
   echo "python not found: ${PYTHON_BIN}" >&2
   exit 1

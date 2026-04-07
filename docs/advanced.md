@@ -51,6 +51,7 @@ cp config/strategy_config.default.json your_path/strategy_config.json
 - `deploy/com.tradesignal.us.open.plist`
 
 这个脚本会用 `America/New_York` 判断是否真的是纽交所交易日开盘后，因此会自动跨夏令时，也会跳过美股休市日。
+脚本启动后会先执行一次 `git pull --ff-only origin main`，然后再运行策略。
 
 以 2026 年为例：
 
@@ -80,6 +81,7 @@ tail -f /tmp/tradesignal-us-open.stderr.log
 - `deploy/com.tradesignal.hk.open.plist`
 
 这套配置会在机器本地时间 `09:35` 触发，再由脚本用 `XHKG` 交易日历判断是否是港股交易日，因此周末和香港休市日会自动跳过。
+脚本启动后会先执行一次 `git pull --ff-only origin main`，然后再运行策略。
 
 ## 数据格式
 
