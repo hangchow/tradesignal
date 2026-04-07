@@ -38,13 +38,9 @@ cp config/tradesignal.sample.json your_path/tradesignal.json
 ./.venv/bin/python -m tradesignal --config your_path/tradesignal.json --no-email
 ```
 
-启动时程序默认会先用 Polygon 增量补齐 `stock_pool.data_root` 下的美股日线数据，再继续算信号。
+启动时程序默认会先用 `yfinance` 增量补齐 `stock_pool.data_root` 下的美股日线数据，再继续算信号。
+日线抓取时机按当前项目约定处理：美股开盘后，才补上一交易日的日线。
 如果抓取失败，程序会直接报错退出。
-需要提前设置环境变量：
-
-```bash
-export POLYGON_API_KEY=your_api_key
-```
 
 如果不想启动时联网抓取，可以加：
 

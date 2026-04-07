@@ -18,6 +18,7 @@ class EmailNotificationConfig:
     password: str | None = None
     password_env: str | None = None
     from_address: str | None = None
+    from_name: str | None = None
     to_addresses: tuple[str, ...] = field(default_factory=tuple)
     subject_prefix: str = "[tradesignal]"
     use_tls: bool = True
@@ -94,6 +95,7 @@ def load_config(path: str | Path) -> AppConfig:
         password=_optional_string(email_raw.get("password")),
         password_env=_optional_string(email_raw.get("password_env")),
         from_address=_optional_string(email_raw.get("from")),
+        from_name=_optional_string(email_raw.get("from_name")),
         to_addresses=to_addresses,
         subject_prefix=str(email_raw.get("subject_prefix", "[tradesignal]")).strip() or "[tradesignal]",
         use_tls=bool(email_raw.get("use_tls", True)),

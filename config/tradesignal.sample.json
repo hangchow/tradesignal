@@ -17,6 +17,7 @@
       "username": "bot@example.com",
       "password": "your-email-password",
       "from": "bot@example.com",
+      "from_name": "Trade Signal",
       "to": [
         "you@example.com"
       ],

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from urllib.request import urlopen
 from zoneinfo import ZoneInfo
@@ -197,11 +198,22 @@ def fetch_range(symbol: str, start_date: date, end_date: date, adjusted: bool, a
     url = build_url(symbol, start_date, end_date, adjusted, api_key)
     results: list[dict] = []
     while url:
-        payload = open_json(url, insecure=insecure)
+        try:
+            payload = open_json(url, insecure=insecure)
+        except HTTPError as exc:
+            detail = _extract_http_error_detail(exc)
+            raise RuntimeError(
+                "polygon daily fetch failed "
+                f"code=US.{symbol} start={start_date.isoformat()} end={end_date.isoformat()} "
+                f"http_status={exc.code} detail={detail}"
+            ) from exc
         status = payload.get("status")
         if status not in {"OK", "DELAYED"}:
             detail = payload.get("error") or payload.get("message") or payload
-            raise RuntimeError(str(detail))
+            raise RuntimeError(
+                "polygon daily fetch returned error payload "
+                f"code=US.{symbol} start={start_date.isoformat()} end={end_date.isoformat()} detail={detail}"
+            )
         results.extend(payload.get("results", []))
         next_url = payload.get("next_url")
         url = with_api_key(next_url, api_key) if next_url else ""
@@ -274,6 +286,12 @@ def save_weekly_files(history: pd.DataFrame, output_root: Path, code: str, keep_
         weekly_path = output_root / f"{code}_{week_start.date().isoformat()}.csv"
         merged_weekly = merge_weekly_payload(weekly_path, weekly, LOCAL_COLUMNS)
         merged_weekly.to_csv(weekly_path, index=False)
+        print(
+            "KLINE_WRITTEN "
+            f"code={code} path={weekly_path} rows={len(merged_weekly)} "
+            f"start={merged_weekly.iloc[0]['time_key'][:10]} end={merged_weekly.iloc[-1]['time_key'][:10]}",
+            flush=True,
+        )
         written_names.add(weekly_path.name)
         file_count += 1
 
@@ -289,3 +307,27 @@ def remove_stale_weekly_files(output_root: Path, code: str, keep_names: set[str]
         path.unlink()
         removed_count += 1
     return removed_count
+
+
+def _extract_http_error_detail(exc: HTTPError) -> str:
+    body = ""
+    if exc.fp is not None:
+        try:
+            raw = exc.read()
+        except Exception:
+            raw = b""
+        if raw:
+            body = raw.decode("utf-8", errors="replace").strip()
+
+    if body:
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError:
+            payload = None
+        if isinstance(payload, dict):
+            detail = payload.get("error") or payload.get("message") or payload.get("status")
+            if detail:
+                return str(detail)
+        return body[:300]
+
+    return exc.reason or exc.msg or "HTTP request failed"

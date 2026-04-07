@@ -11,6 +11,7 @@ requires-python = ">=3.11"
 dependencies = [
     "exchange_calendars",
     "pandas",
+    "yfinance",
 ]
 
 [project.scripts]
