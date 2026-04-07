@@ -43,6 +43,44 @@ cp config/strategy_config.default.json your_path/strategy_config.json
 
 上面这个时间是按机器本地时区写的，实际部署时请按你的机器时区自行调整。
 
+如果你在 macOS 上长期运行，推荐用 `launchd`，这样开机后也能自动按计划触发。
+
+例如项目目录是 `/Volumes/workspace/workspace/tradesignal`，配置文件是 `~/config/tradesignal_us.json`，可以直接使用仓库里的这两个文件：
+
+- `scripts/run_tradesignal_us_open.sh`
+- `deploy/com.tradesignal.us.open.plist`
+
+这个脚本会用 `America/New_York` 判断是否真的是纽交所交易日开盘后，因此会自动跨夏令时，也会跳过美股休市日。
+
+以 2026 年为例：
+
+- 2026-03-09 到 2026-10-30，对应上海时间 `21:35`
+- 2026-11-02 到 2027-03-12，对应上海时间 `22:35`
+
+安装方式：
+
+```bash
+mkdir -p ~/Library/LaunchAgents
+cp deploy/com.tradesignal.us.open.plist ~/Library/LaunchAgents/
+launchctl unload ~/Library/LaunchAgents/com.tradesignal.us.open.plist 2>/dev/null || true
+launchctl load ~/Library/LaunchAgents/com.tradesignal.us.open.plist
+launchctl start com.tradesignal.us.open
+```
+
+查看日志：
+
+```bash
+tail -f /tmp/tradesignal-us-open.stdout.log
+tail -f /tmp/tradesignal-us-open.stderr.log
+```
+
+如果是港股开盘后运行，可以使用：
+
+- `scripts/run_tradesignal_hk_open.sh`
+- `deploy/com.tradesignal.hk.open.plist`
+
+这套配置会在机器本地时间 `09:35` 触发，再由脚本用 `XHKG` 交易日历判断是否是港股交易日，因此周末和香港休市日会自动跳过。
+
 ## 数据格式
 
 每个股票一个目录：
