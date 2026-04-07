@@ -148,9 +148,7 @@ def build_notification_html(
         [
             '      <section class="mail-root">',
             '        <div class="hero">',
-            '          <div class="eyebrow">tradesignal</div>',
             f'          <h1>{escape(title)}</h1>',
-            '          <p class="hero-text">双动量信号邮件预览。结论、候选和风险状态集中展示，便于在 Gmail 列表和正文里快速阅读。</p>',
             "        </div>",
             '        <div class="content">',
             '          <section class="panel">',
@@ -174,7 +172,6 @@ def build_notification_html(
             "      <style>",
             "        .mail-root { background: #fffdf8; }",
             "        .hero { padding: 28px 28px 20px; background: radial-gradient(circle at top left, #f7e6b5, #efe1cc 45%, #f8f5ef 100%); border-bottom: 1px solid #eadfce; }",
-            "        .eyebrow { display: inline-block; padding: 6px 10px; border-radius: 999px; background: rgba(102, 79, 43, 0.08); color: #7b5b2e; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }",
             "        .hero h1 { margin: 14px 0 10px; font-size: 28px; line-height: 1.25; color: #1f2937; }",
             "        .hero-text { margin: 0; color: #5b6472; font-size: 15px; line-height: 1.7; }",
             "        .content { padding: 22px; }",

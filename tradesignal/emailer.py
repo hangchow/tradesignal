@@ -47,7 +47,7 @@ def write_email_preview(config: EmailNotificationConfig, *, subject: str, body: 
     timestamp = datetime.now(ASIA_SHANGHAI).strftime("%Y-%m-%d_%H%M%S")
     filename = f"{timestamp}_{_sanitize_filename(subject)[:80] or 'tradesignal'}.html"
     preview_path = OUTPUT_DIR / filename
-    preview_path.write_text(build_html_document(subject=subject, html_body=html_body), encoding="utf-8")
+    preview_path.write_text(build_preview_document(subject=subject, html_body=html_body), encoding="utf-8")
     return preview_path
 
 
@@ -69,6 +69,27 @@ def _sanitize_filename(value: str) -> str:
 
 
 def build_html_document(*, subject: str, html_body: str) -> str:
+    return "\n".join(
+        [
+            "<!doctype html>",
+            '<html lang="zh-CN">',
+            "<head>",
+            '  <meta charset="utf-8">',
+            '  <meta name="viewport" content="width=device-width, initial-scale=1">',
+            f"  <title>{escape(subject)}</title>",
+            "  <style>",
+            "    body { margin: 0; background: #f4f1ea; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1f2937; }",
+            "  </style>",
+            "</head>",
+            "<body>",
+            f"{html_body}",
+            "</body>",
+            "</html>",
+        ]
+    )
+
+
+def build_preview_document(*, subject: str, html_body: str) -> str:
     return "\n".join(
         [
             "<!doctype html>",
