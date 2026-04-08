@@ -13,6 +13,8 @@ import yfinance as yf
 
 DEFAULT_RATE_LIMIT_SECONDS = 1.0
 DEFAULT_BOOTSTRAP_DAYS = 730
+DEFAULT_FETCH_RETRIES = 3
+DEFAULT_FETCH_RETRY_DELAY_SECONDS = 5.0
 NEW_YORK = ZoneInfo("America/New_York")
 HONG_KONG = ZoneInfo("Asia/Hong_Kong")
 LOCAL_COLUMNS = ["time_key", "open", "close", "high", "low", "volume"]
@@ -182,21 +184,37 @@ def fetch_and_store_history(
 
 
 def fetch_history(code: str, symbol: str, start_date: date, end_date_exclusive: date) -> pd.DataFrame:
-    try:
-        history = yf.Ticker(symbol).history(
-            start=start_date.isoformat(),
-            end=end_date_exclusive.isoformat(),
-            interval="1d",
-            auto_adjust=True,
-            actions=False,
-            raise_errors=True,
-        )
-    except Exception as exc:
-        raise RuntimeError(
-            "yfinance daily fetch failed "
-            f"code={code} start={start_date.isoformat()} end={end_date_exclusive.isoformat()} detail={exc}"
-        ) from exc
-    return convert_to_local_layout(history, timezone=market_timezone(code))
+    last_error: Exception | None = None
+    for attempt in range(1, DEFAULT_FETCH_RETRIES + 1):
+        try:
+            history = yf.Ticker(symbol).history(
+                start=start_date.isoformat(),
+                end=end_date_exclusive.isoformat(),
+                interval="1d",
+                auto_adjust=True,
+                actions=False,
+                raise_errors=True,
+            )
+            return convert_to_local_layout(history, timezone=market_timezone(code))
+        except Exception as exc:
+            last_error = exc
+            if attempt >= DEFAULT_FETCH_RETRIES:
+                break
+            delay = DEFAULT_FETCH_RETRY_DELAY_SECONDS * attempt
+            print(
+                "FETCH_RETRY "
+                f"code={code} attempt={attempt}/{DEFAULT_FETCH_RETRIES} "
+                f"delay_seconds={delay:.1f} detail={exc}",
+                flush=True,
+            )
+            sleep_time.sleep(delay)
+
+    assert last_error is not None
+    raise RuntimeError(
+        "yfinance daily fetch failed "
+        f"code={code} start={start_date.isoformat()} end={end_date_exclusive.isoformat()} "
+        f"after_attempts={DEFAULT_FETCH_RETRIES} detail={last_error}"
+    ) from last_error
 
 
 def convert_to_local_layout(history: pd.DataFrame, *, timezone: ZoneInfo) -> pd.DataFrame:
