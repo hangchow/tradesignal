@@ -8,6 +8,8 @@ from pathlib import Path
 import os
 import re
 import smtplib
+import sys
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -31,6 +33,27 @@ def send_email_notification(config: EmailNotificationConfig, *, subject: str, bo
     message = build_email_message(config, subject=subject, body=body, html_body=html_body)
 
     password = config.password or (os.environ.get(config.password_env, "") if config.password_env else "")
+    delays = [0, 2, 5]
+    last_error: Exception | None = None
+    for attempt, delay_seconds in enumerate(delays, start=1):
+        if delay_seconds:
+            time.sleep(delay_seconds)
+        try:
+            _send_message_once(config, password=password, message=message)
+            return
+        except (smtplib.SMTPException, OSError) as exc:
+            last_error = exc
+            if attempt == len(delays):
+                break
+            print(
+                f"EMAIL_RETRY attempt={attempt} next_delay_seconds={delays[attempt]} error={exc}",
+                file=sys.stderr,
+                flush=True,
+            )
+    raise RuntimeError(f"email delivery failed after {len(delays)} attempts: {last_error}") from last_error
+
+
+def _send_message_once(config: EmailNotificationConfig, *, password: str, message: EmailMessage) -> None:
     smtp_factory = smtplib.SMTP_SSL if config.use_ssl else smtplib.SMTP
     with smtp_factory(config.smtp_host, config.smtp_port, timeout=30) as smtp:
         smtp.ehlo()

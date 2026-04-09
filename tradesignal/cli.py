@@ -17,6 +17,17 @@ from .emailer import send_email_notification, write_email_preview
 from .strategy.dual_momentum import DualMomentumParams, build_dual_momentum_signal
 from .yfinance_day import refresh_daily_data
 
+DEFAULT_CODE_NAMES = {
+    "HK.00005": "汇丰控股",
+    "HK.00700": "腾讯",
+    "HK.01211": "比亚迪股份",
+    "HK.01810": "小米集团",
+    "HK.03690": "美团",
+    "HK.03750": "药明康德",
+    "HK.09988": "阿里巴巴",
+    "HK.00981": "中芯国际",
+}
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run dual momentum and optionally send an email notification.")
@@ -70,12 +81,13 @@ def main(argv: list[str] | None = None) -> int:
 def build_notification_message(config: AppConfig, strategy: StrategyConfig, signal) -> tuple[str, str, str]:
     target_codes = signal.target_codes
     candidate_codes = signal.candidate_codes
-    target_summary = "、".join(target_codes) if target_codes else "CASH"
-    candidate_summary = "、".join(candidate_codes) if candidate_codes else "无"
+    target_summary = _format_code_summary(config, target_codes, empty_value="CASH")
+    candidate_summary = _format_code_summary(config, candidate_codes, empty_value="无")
+    subject_target_summary = _format_name_summary(config, target_codes, empty_value="CASH")
     risk_state = "risk_on" if signal.market_is_risk_on else "risk_off"
-    least_preferred_summary = signal.least_preferred_code or "无"
+    least_preferred_summary = _format_single_code(config, signal.least_preferred_code, empty_value="无")
 
-    subject_core = f"{signal.completed_trade_date} {strategy.name} 推荐：{target_summary}"
+    subject_core = f"{signal.completed_trade_date} {strategy.name} 推荐：{subject_target_summary}"
     subject = f"{config.notification.email.subject_prefix} {subject_core}".strip()
     body = "\n".join(
         [
@@ -83,7 +95,7 @@ def build_notification_message(config: AppConfig, strategy: StrategyConfig, sign
             "",
             f"策略：{strategy.name}",
             f"已完成交易日：{signal.completed_trade_date}",
-            f"当前股票池：{', '.join(config.stock_pool.codes)}",
+            f"当前股票池：{_format_code_summary(config, config.stock_pool.codes, separator=', ', empty_value='无')}",
             f"推荐目标：{target_summary}",
             f"备选候选：{candidate_summary}",
             f"最不推荐：{least_preferred_summary}",
@@ -97,7 +109,7 @@ def build_notification_message(config: AppConfig, strategy: StrategyConfig, sign
         title=subject,
         strategy_name=strategy.name,
         completed_trade_date=str(signal.completed_trade_date),
-        stock_pool=", ".join(config.stock_pool.codes),
+        stock_pool=_format_code_summary(config, config.stock_pool.codes, separator=", ", empty_value="无"),
         target_summary=target_summary,
         candidate_summary=candidate_summary,
         least_preferred_summary=least_preferred_summary,
@@ -107,6 +119,39 @@ def build_notification_message(config: AppConfig, strategy: StrategyConfig, sign
         least_preferred_reason=signal.least_preferred_reason,
     )
     return subject, body, html_body
+
+
+def _format_code_summary(config: AppConfig, codes: tuple[str, ...] | list[str], *, separator: str = "、", empty_value: str) -> str:
+    if not codes:
+        return empty_value
+    return separator.join(_format_code(config, code) for code in codes)
+
+
+def _format_single_code(config: AppConfig, code: str | None, *, empty_value: str) -> str:
+    if not code:
+        return empty_value
+    return _format_code(config, code)
+
+
+def _format_name_summary(config: AppConfig, codes: tuple[str, ...] | list[str], *, empty_value: str) -> str:
+    if not codes:
+        return empty_value
+    return "、".join(_format_name(config, code) for code in codes)
+
+
+def _format_code(config: AppConfig, code: str) -> str:
+    code_name = _lookup_code_name(config, code)
+    if not code_name:
+        return code
+    return f"{code}({code_name})"
+
+
+def _format_name(config: AppConfig, code: str) -> str:
+    return _lookup_code_name(config, code) or code
+
+
+def _lookup_code_name(config: AppConfig, code: str) -> str | None:
+    return config.stock_pool.code_names.get(code) or DEFAULT_CODE_NAMES.get(code)
 
 
 def build_notification_html(

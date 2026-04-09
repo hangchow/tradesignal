@@ -40,6 +40,7 @@ class StrategyConfig:
 class StockPoolConfig:
     codes: tuple[str, ...]
     data_root: Path
+    code_names: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -61,6 +62,16 @@ def load_config(path: str | Path) -> AppConfig:
     codes = tuple(str(code).strip().upper() for code in codes_raw if str(code).strip())
     if not codes:
         raise ValueError("stock_pool.codes must contain at least one non-empty code")
+    code_names_raw = stock_pool_raw.get("code_names", {})
+    if code_names_raw is None:
+        code_names_raw = {}
+    if not isinstance(code_names_raw, dict):
+        raise ValueError("stock_pool.code_names must be an object")
+    code_names = {
+        str(code).strip().upper(): str(name).strip()
+        for code, name in code_names_raw.items()
+        if str(code).strip() and str(name).strip()
+    }
 
     data_root_raw = str(stock_pool_raw.get("data_root", "kline_day")).strip()
     if not data_root_raw:
@@ -103,7 +114,7 @@ def load_config(path: str | Path) -> AppConfig:
     )
 
     return AppConfig(
-        stock_pool=StockPoolConfig(codes=codes, data_root=data_root),
+        stock_pool=StockPoolConfig(codes=codes, data_root=data_root, code_names=code_names),
         notification=NotificationConfig(email=email),
     )
 
