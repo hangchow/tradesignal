@@ -17,6 +17,7 @@ class FallbackHistoryProvider:
     fallback: HistoryProvider
 
     def fetch_history(self, *, code: str, symbol: str, start_date: date, end_date_exclusive: date) -> pd.DataFrame:
+        primary_error: Exception | None = None
         try:
             return self.primary.fetch_history(
                 code=code,
@@ -24,13 +25,23 @@ class FallbackHistoryProvider:
                 start_date=start_date,
                 end_date_exclusive=end_date_exclusive,
             )
-        except Exception as exc:
+        except Exception as primary_exc:
             if not code.upper().startswith("HK."):
                 raise
-            print(f"FETCH_FALLBACK code={code} source=sina reason={exc}", flush=True)
+            primary_error = primary_exc
+            print(f"FETCH_FALLBACK code={code} source=sina reason={primary_exc}", flush=True)
+
+        try:
             return self.fallback.fetch_history(
                 code=code,
                 symbol=symbol,
                 start_date=start_date,
                 end_date_exclusive=end_date_exclusive,
             )
+        except Exception as fallback_exc:
+            primary_detail = str(primary_error) if primary_error is not None else "unknown"
+            raise RuntimeError(
+                "history fetch failed after fallback "
+                f"code={code} symbol={symbol} start={start_date.isoformat()} end={end_date_exclusive.isoformat()} "
+                f"primary_detail={primary_detail} fallback_detail={fallback_exc}"
+            ) from fallback_exc
