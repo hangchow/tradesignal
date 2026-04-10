@@ -59,6 +59,7 @@ def load_config(path: str | Path) -> AppConfig:
     if not isinstance(stock_pool_raw, dict):
         raise ValueError("stock_pool must be an object")
     codes, code_names = _parse_stocks(stock_pool_raw, prefix="stock_pool")
+    market = _infer_market(codes)
 
     data_root_raw = str(stock_pool_raw.get("data_root", "kline_day")).strip()
     if not data_root_raw:
@@ -164,6 +165,8 @@ def _normalize_code(code: str) -> str:
     if upper.isdigit():
         return f"HK.{int(upper):05d}"
     return upper
+
+
 def _infer_market(codes: tuple[str, ...]) -> str:
     prefixes = {"US" if code.startswith("US.") else "HK" if code.startswith("HK.") else "UNKNOWN" for code in codes}
     if prefixes == {"US"}:
