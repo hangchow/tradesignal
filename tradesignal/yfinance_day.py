@@ -152,11 +152,28 @@ def fetch_and_store_history(
 ) -> None:
     end_exclusive = next_calendar_date(end_date)
     for index, (code, symbol) in enumerate(symbols):
+        symbol_start_date = resolve_symbol_refresh_start_date(
+            data_root=data_root,
+            code=code,
+            fallback_start_date=start_date,
+        )
+        if symbol_start_date > end_date:
+            print(
+                f"FETCH_SKIPPED code={code} start={symbol_start_date.isoformat()} end={end_date.isoformat()} reason=up_to_date",
+                flush=True,
+            )
+            continue
+
         output_root = data_root / code
-        history = fetch_history(code=code, symbol=symbol, start_date=start_date, end_date_exclusive=end_exclusive)
+        history = fetch_history(
+            code=code,
+            symbol=symbol,
+            start_date=symbol_start_date,
+            end_date_exclusive=end_exclusive,
+        )
         if history.empty:
             raise RuntimeError(
-                f"yfinance daily fetch returned no rows code={code} start={start_date.isoformat()} end={end_date.isoformat()}"
+                f"yfinance daily fetch returned no rows code={code} start={symbol_start_date.isoformat()} end={end_date.isoformat()}"
             )
 
         file_count, _ = save_weekly_files(
@@ -174,6 +191,13 @@ def fetch_and_store_history(
 
         if index + 1 < len(symbols):
             sleep_time.sleep(rate_limit_seconds)
+
+
+def resolve_symbol_refresh_start_date(*, data_root: Path, code: str, fallback_start_date: date) -> date:
+    latest_date = get_latest_local_trade_date(data_root / code)
+    if latest_date is None:
+        return fallback_start_date
+    return max(fallback_start_date, next_trade_date(code, latest_date))
 
 
 def fetch_history(code: str, symbol: str, start_date: date, end_date_exclusive: date) -> pd.DataFrame:
