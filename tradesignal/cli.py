@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import traceback
 from html import escape
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from .config import (
     StrategyConfig,
     load_config,
     load_default_strategy_config,
+    load_notification_config,
     load_strategy_config,
 )
 from .data import load_daily_data
@@ -33,7 +35,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-email", action="store_true", help="Suppress email even if enabled in config.")
     parser.add_argument("--skip-fetch", action="store_true", help="Skip daily data refresh before loading local CSV files.")
     args = parser.parse_args(argv)
+    config_path = Path(args.config)
+    notification = None
+    try:
+        notification = load_notification_config(config_path)
+    except Exception:
+        notification = None
 
+    try:
+        return _run(args)
+    except Exception as exc:
+        _notify_error(args, config_path, notification, exc)
+        return 1
+
+
+def _run(args: argparse.Namespace) -> int:
     config = load_config(Path(args.config))
     strategy = load_default_strategy_config()
     if args.strategy_config:
@@ -42,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
     params.validate()
 
     print(
-        f"RUNNING strategy={strategy.name} codes={len(config.stock_pool.codes)} data_root={config.stock_pool.data_root}",
+        f"RUNNING strategy={strategy.name} market={config.stock_pool.market} codes={len(config.stock_pool.codes)} data_root={config.stock_pool.data_root}",
         flush=True,
     )
     if not args.skip_fetch:
@@ -65,6 +81,46 @@ def main(argv: list[str] | None = None) -> int:
         print(f"EMAIL_SENT to={','.join(config.notification.email.to_addresses)} subject={subject}", flush=True)
 
     return 0
+
+
+def _notify_error(args: argparse.Namespace, config_path: Path, notification, exc: Exception) -> None:
+    details = "".join(traceback.format_exception(exc))
+    print(details, flush=True)
+
+    if args.no_email or notification is None or not notification.email.enabled:
+        return
+
+    subject = f"{notification.email.subject_prefix} tradesignal 运行失败".strip()
+    body = "\n".join(
+        [
+            "tradesignal",
+            "",
+            "运行状态：failed",
+            f"配置文件：{config_path}",
+            f"错误类型：{type(exc).__name__}",
+            f"错误信息：{exc}",
+            "",
+            "Traceback:",
+            details.strip(),
+        ]
+    )
+    html_body = build_notification_html(
+        title=subject,
+        strategy_name="N/A",
+        completed_trade_date="N/A",
+        stock_pool="N/A",
+        target_summary="N/A",
+        candidate_summary="N/A",
+        least_preferred_summary="N/A",
+        risk_state="error",
+        gross_exposure="0.0000",
+        recommendation_reason=f"运行失败：{type(exc).__name__}: {exc}",
+        least_preferred_reason="请检查配置与日志后重试。",
+    )
+    preview_path = write_email_preview(notification.email, subject=subject, body=body, html_body=html_body)
+    print(f"EMAIL_PREVIEW path={preview_path}", flush=True)
+    send_email_notification(notification.email, subject=subject, body=body, html_body=html_body)
+    print(f"EMAIL_SENT to={','.join(notification.email.to_addresses)} subject={subject}", flush=True)
 
 
 def build_notification_message(config: AppConfig, strategy: StrategyConfig, signal) -> tuple[str, str, str]:
