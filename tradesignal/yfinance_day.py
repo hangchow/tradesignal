@@ -19,8 +19,8 @@ LOCAL_COLUMNS = ["time_key", "open", "close", "high", "low", "volume"]
 
 
 DEFAULT_HISTORY_PROVIDER = FallbackHistoryProvider(
-    primary=YFinanceDailyProvider(),
-    fallback=SinaDailyProvider(),
+    primary=SinaDailyProvider(),
+    fallback=YFinanceDailyProvider(),
 )
 
 
@@ -40,7 +40,7 @@ def refresh_daily_data(
         return
 
     print(
-        f"FETCHING_YFINANCE start={start_date.isoformat()} end={end_date.isoformat()} symbols={len(symbols)} data_root={data_root}",
+        f"FETCHING_DAILY_HISTORY start={start_date.isoformat()} end={end_date.isoformat()} symbols={len(symbols)} data_root={data_root}",
         flush=True,
     )
     fetch_and_store_history(
@@ -177,7 +177,7 @@ def fetch_and_store_history(
         )
         if history.empty:
             raise RuntimeError(
-                f"yfinance daily fetch returned no rows code={code} start={symbol_start_date.isoformat()} end={end_date.isoformat()}"
+                f"daily history fetch returned no rows code={code} start={symbol_start_date.isoformat()} end={end_date.isoformat()}"
             )
 
         file_count, _ = save_weekly_files(
