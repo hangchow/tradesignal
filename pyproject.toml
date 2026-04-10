@@ -12,6 +12,7 @@ dependencies = [
     "exchange_calendars",
     "pandas",
     "yfinance",
+    "akshare",
 ]
 
 [project.scripts]

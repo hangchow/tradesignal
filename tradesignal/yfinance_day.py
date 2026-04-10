@@ -10,6 +10,11 @@ import exchange_calendars as xcals
 import pandas as pd
 import yfinance as yf
 
+try:
+    import akshare as ak
+except Exception:  # pragma: no cover - optional fallback import guard
+    ak = None
+
 
 DEFAULT_RATE_LIMIT_SECONDS = 1.0
 DEFAULT_BOOTSTRAP_DAYS = 730
@@ -165,7 +170,7 @@ def fetch_and_store_history(
             continue
 
         output_root = data_root / code
-        history = fetch_history(
+        history = fetch_history_with_fallback(
             code=code,
             symbol=symbol,
             start_date=symbol_start_date,
@@ -232,6 +237,62 @@ def fetch_history(code: str, symbol: str, start_date: date, end_date_exclusive: 
         f"code={code} start={start_date.isoformat()} end={end_date_exclusive.isoformat()} "
         f"after_attempts={DEFAULT_FETCH_RETRIES} detail={last_error}"
     ) from last_error
+
+
+def fetch_history_with_fallback(code: str, symbol: str, start_date: date, end_date_exclusive: date) -> pd.DataFrame:
+    try:
+        return fetch_history(code=code, symbol=symbol, start_date=start_date, end_date_exclusive=end_date_exclusive)
+    except RuntimeError as exc:
+        if not code.upper().startswith("HK."):
+            raise
+
+        print(f"FETCH_FALLBACK code={code} source=sina reason={exc}", flush=True)
+        return fetch_history_from_sina(
+            code=code,
+            start_date=start_date,
+            end_date_exclusive=end_date_exclusive,
+            previous_error=exc,
+        )
+
+
+def fetch_history_from_sina(
+    *,
+    code: str,
+    start_date: date,
+    end_date_exclusive: date,
+    previous_error: RuntimeError,
+) -> pd.DataFrame:
+    if ak is None:
+        raise RuntimeError(
+            "sina fallback unavailable because akshare is not installed "
+            f"code={code} start={start_date.isoformat()} end={end_date_exclusive.isoformat()}"
+        ) from previous_error
+
+    raw_symbol = str(code).upper().removeprefix("HK.")
+    if not raw_symbol.isdigit():
+        raise RuntimeError(f"invalid HK symbol for sina fallback code={code}") from previous_error
+
+    symbol = f"{int(raw_symbol):05d}"
+    try:
+        history = ak.stock_hk_daily(symbol=symbol, adjust="")
+    except Exception as exc:
+        raise RuntimeError(
+            "sina daily fetch failed "
+            f"code={code} symbol={symbol} start={start_date.isoformat()} end={end_date_exclusive.isoformat()} detail={exc}"
+        ) from exc
+
+    if history.empty:
+        return pd.DataFrame(columns=LOCAL_COLUMNS)
+
+    history = history.rename(columns={"date": "time_key"})
+    history["time_key"] = pd.to_datetime(history["time_key"]).dt.strftime("%Y-%m-%d 00:00:00")
+    filtered = history.loc[
+        (pd.to_datetime(history["time_key"]).dt.date >= start_date)
+        & (pd.to_datetime(history["time_key"]).dt.date < end_date_exclusive),
+        ["time_key", "open", "close", "high", "low", "volume"],
+    ].copy()
+    filtered["volume"] = pd.to_numeric(filtered["volume"], errors="coerce").fillna(0).astype(int)
+    return filtered.reset_index(drop=True)
 
 
 def convert_to_local_layout(history: pd.DataFrame, *, timezone: ZoneInfo) -> pd.DataFrame:
