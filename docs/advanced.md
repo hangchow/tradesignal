@@ -15,7 +15,7 @@ cp config/strategy_config.default.json your_path/strategy_config.json
 运行时传入：
 
 ```bash
-./.venv/bin/python -m tradesignal --config your_path/tradesignal.json --strategy_config your_path/strategy_config.json
+./.venv/bin/python -m tradesignal --config your_path/tradesignal.us.json --strategy_config your_path/strategy_config.json
 ```
 
 你自己的策略配置文件会以 `config/strategy_config.default.json` 为基础，同名参数会覆盖默认值。
@@ -38,7 +38,7 @@ cp config/strategy_config.default.json your_path/strategy_config.json
 例如美东开盘后每天跑一次：
 
 ```cron
-35 21 * * 1-5 cd your_project_path && your_project_path/.venv/bin/python -m tradesignal --config your_path/tradesignal.json --strategy_config your_path/strategy_config.json >> /tmp/tradesignal.log 2>&1
+35 21 * * 1-5 cd your_project_path && your_project_path/.venv/bin/python -m tradesignal --config your_path/tradesignal.us.json --strategy_config your_path/strategy_config.json >> /tmp/tradesignal.log 2>&1
 ```
 
 上面这个时间是按机器本地时区写的，实际部署时请按你的机器时区自行调整。
@@ -101,6 +101,13 @@ CSV 至少要有这些列：
 - `time_key`
 - `close`
 - `volume`
+
+## 代码名称映射
+
+推荐在 `stock_pool.stocks` 中直接配置 `code` + `cn_name`：
+
+- `code`（如 `HK.00700`）
+- `cn_name`（如 `腾讯控股`）
 
 ## 邮件内容
 

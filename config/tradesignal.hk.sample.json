@@ -1,13 +1,24 @@
 {
   "stock_pool": {
-    "codes": [
-      "US.MSFT",
-      "US.NVDA",
-      "US.GOOG",
-      "US.AAPL",
-      "US.VOO"
+    "stocks": [
+      {
+        "code": "HK.00700",
+        "cn_name": "腾讯控股"
+      },
+      {
+        "code": "HK.03690",
+        "cn_name": "美团-W"
+      },
+      {
+        "code": "HK.09988",
+        "cn_name": "阿里巴巴-W"
+      },
+      {
+        "code": "HK.03750",
+        "cn_name": "宁德时代"
+      }
     ],
-    "data_root": "/your_path/kline_day"
+    "data_root": "/your_path/kline_day_hk"
   },
   "notification": {
     "email": {
