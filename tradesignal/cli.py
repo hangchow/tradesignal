@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import os
+import re
 import traceback
 from html import escape
 from pathlib import Path
@@ -85,7 +87,10 @@ def _run(args: argparse.Namespace) -> int:
 
 def _notify_error(args: argparse.Namespace, config_path: Path, notification, exc: Exception) -> None:
     details = "".join(traceback.format_exception(exc))
-    print(details, flush=True)
+    friendly_message = _build_friendly_error_message(exc)
+    print(friendly_message, flush=True)
+    if os.getenv("TRADESIGNAL_SHOW_TRACEBACK", "").strip() == "1":
+        print(details, flush=True)
 
     if args.no_email or notification is None or not notification.email.enabled:
         return
@@ -99,6 +104,9 @@ def _notify_error(args: argparse.Namespace, config_path: Path, notification, exc
             f"配置文件：{config_path}",
             f"错误类型：{type(exc).__name__}",
             f"错误信息：{exc}",
+            "",
+            "用户提示：",
+            friendly_message,
             "",
             "Traceback:",
             details.strip(),
@@ -121,6 +129,48 @@ def _notify_error(args: argparse.Namespace, config_path: Path, notification, exc
     print(f"EMAIL_PREVIEW path={preview_path}", flush=True)
     send_email_notification(notification.email, subject=subject, body=body, html_body=html_body)
     print(f"EMAIL_SENT to={','.join(notification.email.to_addresses)} subject={subject}", flush=True)
+
+
+def _build_friendly_error_message(exc: Exception) -> str:
+    root_message = _root_cause_message(exc)
+    if "Too Many Requests. Rate limited." in root_message:
+        code = _extract_field(str(exc), "code") or "unknown"
+        date_start = _extract_field(str(exc), "start") or "unknown"
+        date_end = _extract_field(str(exc), "end") or "unknown"
+        return "\n".join(
+            [
+                "ERROR yfinance 请求被限流（HTTP 429 Too Many Requests）。",
+                f"失败标的：{code}，请求区间：{date_start} ~ {date_end}。",
+                "建议：",
+                "1) 等待 15~60 分钟后重试。",
+                "2) 临时加大抓取间隔（提高 rate_limit_seconds）。",
+                "3) 若本地数据已可用，可使用 --skip-fetch 跳过在线抓取。",
+                "如需完整堆栈，请设置环境变量 TRADESIGNAL_SHOW_TRACEBACK=1 后重试。",
+            ]
+        )
+    return (
+        f"ERROR {type(exc).__name__}: {exc}\n"
+        "如需完整堆栈，请设置环境变量 TRADESIGNAL_SHOW_TRACEBACK=1 后重试。"
+    )
+
+
+def _extract_field(text: str, field: str) -> str | None:
+    match = re.search(rf"{field}=([^\s]+)", text)
+    if not match:
+        return None
+    return match.group(1)
+
+
+def _root_cause_message(exc: Exception) -> str:
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        cause = current.__cause__ or current.__context__
+        if cause is None:
+            break
+        current = cause
+    return str(current) if current is not None else str(exc)
 
 
 def build_notification_message(config: AppConfig, strategy: StrategyConfig, signal) -> tuple[str, str, str]:
