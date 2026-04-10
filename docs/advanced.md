@@ -83,6 +83,29 @@ tail -f /tmp/tradesignal-us-open.stderr.log
 这套配置会在机器本地时间 `09:35` 触发，再由脚本用 `XHKG` 交易日历判断是否是港股交易日，因此周末和香港休市日会自动跳过。
 脚本启动后会先执行一次 `git pull --ff-only origin main`，然后再运行策略。
 
+## 复盘某一天“加权动量”具体数字
+
+如果你要追溯邮件里的具体数值（例如 `US.GLD` 在 `2026-04-08` 的 `20.4%`），可直接运行：
+
+```bash
+python scripts/explain_weighted_momentum.py \
+  --config /path/to/tradesignal.json \
+  --strategy-config /path/to/strategy_config.json \
+  --date 2026-04-08 \
+  --code US.GLD
+```
+
+脚本会输出：
+
+- 当日收盘、90 日前收盘、180 日前收盘
+- 当日成交量、过去 20 日均量
+- 短周期动量、长周期动量、综合动量
+- 量比、量能加权因子
+- 最终加权动量（原始值、百分比、通知展示值）
+
+这样你可以直接看到“20.4%”的每一个中间数字，不需要自己手工推导。
+如果目标日期之前历史数据不足（例如不够 180 个交易日），脚本会直接提示并退出，避免给出误导结果。
+
 ## 数据格式
 
 每个股票一个目录：
@@ -126,3 +149,37 @@ CSV 至少要有这些列：
 - “你当前该买多少股”
 
 因为这个项目不读取你的真实持仓。
+
+## dual_momentum 的“加权动量”怎么算
+
+通知里提到的“加权动量 20.4%”，对应的是策略里 `weighted_momentum` 的结果。计算分三步：
+
+1. **短周期动量（默认 90 日）**
+   \[
+   short\_momentum = \frac{P_t}{P_{t-90}} - 1
+   \]
+
+2. **长周期动量（默认 180 日）并合成综合动量**
+   \[
+   long\_momentum = \frac{P_t}{P_{t-180}} - 1
+   \]
+   \[
+   blended\_momentum = short\_momentum \times (1-0.25) + long\_momentum \times 0.25
+   \]
+
+3. **成交量加权（只对正动量生效）**
+   - 先算量比：`relative_volume = 当日成交量 / 过去20日均量`
+   - 再算放大因子 `volume_boost`：
+     - 若量比 `< 1.3`，放大因子 = `1.0`
+     - 若量比 `>= 1.3`，放大因子 = `min(量比, 1.5) / 1.3`
+   - 最终：
+     \[
+     weighted\_momentum =
+     \begin{cases}
+     blended\_momentum \times volume\_boost, & blended\_momentum > 0 \\
+     \text{不参与候选（视为 NaN）}, & blended\_momentum \le 0
+     \end{cases}
+     \]
+
+所以“20.4%”就是该标的在当日的 `weighted_momentum`（四舍五入到 1 位小数）；
+如果当日量比没超过阈值 1.3x，那么它基本等于综合动量；如果超过阈值，则会被放大（最多按 1.5/1.3 倍放大）。
