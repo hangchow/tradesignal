@@ -39,6 +39,7 @@ class StrategyConfig:
 @dataclass(frozen=True)
 class StockPoolConfig:
     codes: tuple[str, ...]
+    market: str
     data_root: Path
     code_names: dict[str, str] = field(default_factory=dict)
 
@@ -52,6 +53,7 @@ class AppConfig:
 def load_config(path: str | Path) -> AppConfig:
     config_path = Path(path)
     payload = json.loads(config_path.read_text(encoding="utf-8"))
+    notification = _parse_notification_config(payload.get("notification", {}))
 
     stock_pool_raw = payload.get("stock_pool")
     if not isinstance(stock_pool_raw, dict):
@@ -62,6 +64,7 @@ def load_config(path: str | Path) -> AppConfig:
     codes = tuple(str(code).strip().upper() for code in codes_raw if str(code).strip())
     if not codes:
         raise ValueError("stock_pool.codes must contain at least one non-empty code")
+    market = _infer_market(codes)
     code_names_raw = stock_pool_raw.get("code_names", {})
     if code_names_raw is None:
         code_names_raw = {}
@@ -80,43 +83,16 @@ def load_config(path: str | Path) -> AppConfig:
     if not data_root.is_absolute():
         data_root = (config_path.parent / data_root).resolve()
 
-    notification_raw = payload.get("notification", {})
-    if notification_raw is None:
-        notification_raw = {}
-    if not isinstance(notification_raw, dict):
-        raise ValueError("notification must be an object")
-    email_raw = notification_raw.get("email", {})
-    if email_raw is None:
-        email_raw = {}
-    if not isinstance(email_raw, dict):
-        raise ValueError("notification.email must be an object")
-
-    to_raw = email_raw.get("to", [])
-    if to_raw is None:
-        to_raw = []
-    if not isinstance(to_raw, list):
-        raise ValueError("notification.email.to must be an array")
-    to_addresses = tuple(str(value).strip() for value in to_raw if str(value).strip())
-
-    email = EmailNotificationConfig(
-        enabled=bool(email_raw.get("enabled", False)),
-        smtp_host=_optional_string(email_raw.get("smtp_host")),
-        smtp_port=int(email_raw.get("smtp_port", 587)),
-        username=_optional_string(email_raw.get("username")),
-        password=_optional_string(email_raw.get("password")),
-        password_env=_optional_string(email_raw.get("password_env")),
-        from_address=_optional_string(email_raw.get("from")),
-        from_name=_optional_string(email_raw.get("from_name")),
-        to_addresses=to_addresses,
-        subject_prefix=str(email_raw.get("subject_prefix", "[tradesignal]")).strip() or "[tradesignal]",
-        use_tls=bool(email_raw.get("use_tls", True)),
-        use_ssl=bool(email_raw.get("use_ssl", False)),
-    )
-
     return AppConfig(
-        stock_pool=StockPoolConfig(codes=codes, data_root=data_root, code_names=code_names),
-        notification=NotificationConfig(email=email),
+        stock_pool=StockPoolConfig(codes=codes, market=market, data_root=data_root, code_names=code_names),
+        notification=notification,
     )
+
+
+def load_notification_config(path: str | Path) -> NotificationConfig:
+    config_path = Path(path)
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    return _parse_notification_config(payload.get("notification", {}))
 
 
 def load_strategy_config(path: str | Path, *, base: StrategyConfig | None = None) -> StrategyConfig:
@@ -175,3 +151,49 @@ def _optional_string(value: object) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _infer_market(codes: tuple[str, ...]) -> str:
+    prefixes = {"US" if code.startswith("US.") else "HK" if code.startswith("HK.") else "UNKNOWN" for code in codes}
+    if prefixes == {"US"}:
+        return "US"
+    if prefixes == {"HK"}:
+        return "HK"
+    if prefixes == {"US", "HK"}:
+        raise ValueError("stock_pool.codes must belong to a single market; found both US.* and HK.* codes")
+    raise ValueError("stock_pool.codes only support US.* or HK.* codes")
+
+
+def _parse_notification_config(notification_raw: object) -> NotificationConfig:
+    if notification_raw is None:
+        notification_raw = {}
+    if not isinstance(notification_raw, dict):
+        raise ValueError("notification must be an object")
+    email_raw = notification_raw.get("email", {})
+    if email_raw is None:
+        email_raw = {}
+    if not isinstance(email_raw, dict):
+        raise ValueError("notification.email must be an object")
+
+    to_raw = email_raw.get("to", [])
+    if to_raw is None:
+        to_raw = []
+    if not isinstance(to_raw, list):
+        raise ValueError("notification.email.to must be an array")
+    to_addresses = tuple(str(value).strip() for value in to_raw if str(value).strip())
+
+    email = EmailNotificationConfig(
+        enabled=bool(email_raw.get("enabled", False)),
+        smtp_host=_optional_string(email_raw.get("smtp_host")),
+        smtp_port=int(email_raw.get("smtp_port", 587)),
+        username=_optional_string(email_raw.get("username")),
+        password=_optional_string(email_raw.get("password")),
+        password_env=_optional_string(email_raw.get("password_env")),
+        from_address=_optional_string(email_raw.get("from")),
+        from_name=_optional_string(email_raw.get("from_name")),
+        to_addresses=to_addresses,
+        subject_prefix=str(email_raw.get("subject_prefix", "[tradesignal]")).strip() or "[tradesignal]",
+        use_tls=bool(email_raw.get("use_tls", True)),
+        use_ssl=bool(email_raw.get("use_ssl", False)),
+    )
+    return NotificationConfig(email=email)
