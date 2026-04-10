@@ -14,12 +14,12 @@ python3 -m venv .venv
 复制一份样例配置：
 
 ```bash
-cp config/tradesignal.sample.json your_path/tradesignal.json
+cp config/tradesignal.us.sample.json your_path/tradesignal.us.json
 ```
 
 至少改这几项：
 
-- `stock_pool.codes`
+- `stock_pool.stocks`
 - `stock_pool.data_root`
 - `notification.email.*`
 
@@ -29,13 +29,13 @@ cp config/tradesignal.sample.json your_path/tradesignal.json
 ## 手动运行
 
 ```bash
-./.venv/bin/python -m tradesignal --config your_path/tradesignal.json
+./.venv/bin/python -m tradesignal --config your_path/tradesignal.us.json
 ```
 
 只打印，不发邮件：
 
 ```bash
-./.venv/bin/python -m tradesignal --config your_path/tradesignal.json --no-email
+./.venv/bin/python -m tradesignal --config your_path/tradesignal.us.json --no-email
 ```
 
 启动时程序默认会先用 `yfinance` 增量补齐 `stock_pool.data_root` 下的美股日线数据，再继续算信号。
@@ -45,7 +45,7 @@ cp config/tradesignal.sample.json your_path/tradesignal.json
 如果不想启动时联网抓取，可以加：
 
 ```bash
-./.venv/bin/python -m tradesignal --config your_path/tradesignal.json --skip-fetch
+./.venv/bin/python -m tradesignal --config your_path/tradesignal.us.json --skip-fetch
 ```
 
 ## 进阶

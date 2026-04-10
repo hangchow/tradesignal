@@ -107,19 +107,12 @@ def market_timezone(code: str) -> ZoneInfo:
 
 def expected_latest_trade_date(code: str, now: datetime) -> date:
     calendar = market_calendar(code)
-    timezone = market_timezone(code)
-    current = now.astimezone(timezone)
-    current_session_label = pd.Timestamp(current.date())
+    current_session_label = pd.Timestamp(now.astimezone(market_timezone(code)).date())
     if calendar.is_session(current_session_label):
-        current_session_open = calendar.session_open(current_session_label).tz_convert(timezone)
-        if current >= current_session_open:
-            return pd.Timestamp(calendar.previous_session(current_session_label)).date()
-        previous_session = calendar.previous_session(current_session_label)
-        return pd.Timestamp(calendar.previous_session(previous_session)).date()
+        return pd.Timestamp(calendar.previous_session(current_session_label)).date()
 
     next_session = calendar.date_to_session(current_session_label, direction="next")
-    previous_session = calendar.previous_session(next_session)
-    return pd.Timestamp(calendar.previous_session(previous_session)).date()
+    return pd.Timestamp(calendar.previous_session(next_session)).date()
 
 
 def next_trade_date(code: str, current_date: date) -> date:

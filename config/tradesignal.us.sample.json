@@ -1,0 +1,40 @@
+{
+  "stock_pool": {
+    "stocks": [
+      {
+        "code": "US.MSFT",
+        "cn_name": "微软"
+      },
+      {
+        "code": "US.NVDA",
+        "cn_name": "英伟达"
+      },
+      {
+        "code": "US.GOOG",
+        "cn_name": "谷歌"
+      },
+      {
+        "code": "US.AAPL",
+        "cn_name": "苹果"
+      }
+    ],
+    "data_root": "/your_path/kline_day_us"
+  },
+  "notification": {
+    "email": {
+      "enabled": false,
+      "smtp_host": "smtp.example.com",
+      "smtp_port": 587,
+      "username": "bot@example.com",
+      "password": "your-email-password",
+      "from": "bot@example.com",
+      "from_name": "Trade Signal",
+      "to": [
+        "you@example.com"
+      ],
+      "subject_prefix": "[tradesignal]",
+      "use_tls": true,
+      "use_ssl": false
+    }
+  }
+}

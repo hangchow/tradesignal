@@ -19,17 +19,6 @@ from .emailer import send_email_notification, write_email_preview
 from .strategy.dual_momentum import DualMomentumParams, build_dual_momentum_signal
 from .yfinance_day import refresh_daily_data
 
-DEFAULT_CODE_NAMES = {
-    "HK.00005": "汇丰控股",
-    "HK.00700": "腾讯",
-    "HK.01211": "比亚迪股份",
-    "HK.01810": "小米集团",
-    "HK.03690": "美团",
-    "HK.03750": "药明康德",
-    "HK.09988": "阿里巴巴",
-    "HK.00981": "中芯国际",
-}
-
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run dual momentum and optionally send an email notification.")
@@ -44,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument("--no-email", action="store_true", help="Suppress email even if enabled in config.")
-    parser.add_argument("--skip-fetch", action="store_true", help="Skip Polygon daily data refresh before loading local CSV files.")
+    parser.add_argument("--skip-fetch", action="store_true", help="Skip daily data refresh before loading local CSV files.")
     args = parser.parse_args(argv)
     config_path = Path(args.config)
     notification = None
@@ -207,7 +196,7 @@ def _format_name(config: AppConfig, code: str) -> str:
 
 
 def _lookup_code_name(config: AppConfig, code: str) -> str | None:
-    return config.stock_pool.code_names.get(code) or DEFAULT_CODE_NAMES.get(code)
+    return config.stock_pool.code_names.get(code)
 
 
 def build_notification_html(

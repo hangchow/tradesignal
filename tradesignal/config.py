@@ -58,23 +58,7 @@ def load_config(path: str | Path) -> AppConfig:
     stock_pool_raw = payload.get("stock_pool")
     if not isinstance(stock_pool_raw, dict):
         raise ValueError("stock_pool must be an object")
-    codes_raw = stock_pool_raw.get("codes")
-    if not isinstance(codes_raw, list) or not codes_raw:
-        raise ValueError("stock_pool.codes must be a non-empty array")
-    codes = tuple(str(code).strip().upper() for code in codes_raw if str(code).strip())
-    if not codes:
-        raise ValueError("stock_pool.codes must contain at least one non-empty code")
-    market = _infer_market(codes)
-    code_names_raw = stock_pool_raw.get("code_names", {})
-    if code_names_raw is None:
-        code_names_raw = {}
-    if not isinstance(code_names_raw, dict):
-        raise ValueError("stock_pool.code_names must be an object")
-    code_names = {
-        str(code).strip().upper(): str(name).strip()
-        for code, name in code_names_raw.items()
-        if str(code).strip() and str(name).strip()
-    }
+    codes, code_names = _parse_stocks(stock_pool_raw, prefix="stock_pool")
 
     data_root_raw = str(stock_pool_raw.get("data_root", "kline_day")).strip()
     if not data_root_raw:
@@ -153,6 +137,33 @@ def _optional_string(value: object) -> str | None:
     return text or None
 
 
+def _parse_stocks(stock_pool_raw: dict[str, Any], *, prefix: str) -> tuple[tuple[str, ...], dict[str, str]]:
+    stocks_raw = stock_pool_raw.get("stocks")
+    if not isinstance(stocks_raw, list) or not stocks_raw:
+        raise ValueError(f"{prefix}.stocks must be a non-empty array")
+    codes: list[str] = []
+    code_names: dict[str, str] = {}
+    for index, item in enumerate(stocks_raw):
+        item_prefix = f"{prefix}.stocks[{index}]"
+        if not isinstance(item, dict):
+            raise ValueError(f"{item_prefix} must be an object")
+        code = _normalize_code(str(item.get("code", "")).strip())
+        if not code:
+            raise ValueError(f"{item_prefix}.code must be non-empty")
+        codes.append(code)
+        cn_name = str(item.get("cn_name", "")).strip()
+        if cn_name:
+            code_names[code] = cn_name
+    return tuple(codes), code_names
+
+
+def _normalize_code(code: str) -> str:
+    upper = code.strip().upper()
+    if upper.startswith("HK.") and upper[3:].isdigit():
+        return f"HK.{int(upper[3:]):05d}"
+    if upper.isdigit():
+        return f"HK.{int(upper):05d}"
+    return upper
 def _infer_market(codes: tuple[str, ...]) -> str:
     prefixes = {"US" if code.startswith("US.") else "HK" if code.startswith("HK.") else "UNKNOWN" for code in codes}
     if prefixes == {"US"}:
