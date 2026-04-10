@@ -26,10 +26,13 @@ class FallbackHistoryProvider:
                 end_date_exclusive=end_date_exclusive,
             )
         except Exception as primary_exc:
-            if not code.upper().startswith("HK."):
-                raise
             primary_error = primary_exc
-            print(f"FETCH_FALLBACK code={code} source=sina reason={primary_exc}", flush=True)
+            print(
+                "FETCH_FALLBACK "
+                f"code={code} primary={type(self.primary).__name__} fallback={type(self.fallback).__name__} "
+                f"reason={primary_exc}",
+                flush=True,
+            )
 
         try:
             return self.fallback.fetch_history(
