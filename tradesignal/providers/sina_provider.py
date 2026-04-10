@@ -1,13 +1,9 @@
 from __future__ import annotations
 
 from datetime import date
+import importlib
 
 import pandas as pd
-
-try:
-    import akshare as ak
-except Exception:  # pragma: no cover - optional fallback import guard
-    ak = None
 
 
 LOCAL_COLUMNS = ["time_key", "open", "close", "high", "low", "volume"]
@@ -15,7 +11,9 @@ LOCAL_COLUMNS = ["time_key", "open", "close", "high", "low", "volume"]
 
 class SinaDailyProvider:
     def fetch_history(self, *, code: str, symbol: str, start_date: date, end_date_exclusive: date) -> pd.DataFrame:
-        if ak is None:
+        try:
+            ak_module = importlib.import_module("akshare")
+        except ModuleNotFoundError:
             raise RuntimeError(
                 "sina fallback unavailable because akshare is not installed "
                 f"code={code} start={start_date.isoformat()} end={end_date_exclusive.isoformat()}"
@@ -27,7 +25,7 @@ class SinaDailyProvider:
 
         target_symbol = f"{int(raw_symbol):05d}"
         try:
-            history = ak.stock_hk_daily(symbol=target_symbol, adjust="")
+            history = ak_module.stock_hk_daily(symbol=target_symbol, adjust="")
         except Exception as exc:
             raise RuntimeError(
                 "sina daily fetch failed "
