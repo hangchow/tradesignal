@@ -8,21 +8,20 @@ from zoneinfo import ZoneInfo
 
 import exchange_calendars as xcals
 import pandas as pd
-import yfinance as yf
-
-try:
-    import akshare as ak
-except Exception:  # pragma: no cover - optional fallback import guard
-    ak = None
+from .providers import FallbackHistoryProvider, SinaDailyProvider, YFinanceDailyProvider
 
 
 DEFAULT_RATE_LIMIT_SECONDS = 1.0
 DEFAULT_BOOTSTRAP_DAYS = 730
-DEFAULT_FETCH_RETRIES = 3
-DEFAULT_FETCH_RETRY_DELAY_SECONDS = 5.0
 NEW_YORK = ZoneInfo("America/New_York")
 HONG_KONG = ZoneInfo("Asia/Hong_Kong")
 LOCAL_COLUMNS = ["time_key", "open", "close", "high", "low", "volume"]
+
+
+DEFAULT_HISTORY_PROVIDER = FallbackHistoryProvider(
+    primary=YFinanceDailyProvider(),
+    fallback=SinaDailyProvider(),
+)
 
 
 def refresh_daily_data(
@@ -170,7 +169,7 @@ def fetch_and_store_history(
             continue
 
         output_root = data_root / code
-        history = fetch_history_with_fallback(
+        history = DEFAULT_HISTORY_PROVIDER.fetch_history(
             code=code,
             symbol=symbol,
             start_date=symbol_start_date,
@@ -203,127 +202,6 @@ def resolve_symbol_refresh_start_date(*, data_root: Path, code: str, fallback_st
     if latest_date is None:
         return fallback_start_date
     return max(fallback_start_date, next_trade_date(code, latest_date))
-
-
-def fetch_history(code: str, symbol: str, start_date: date, end_date_exclusive: date) -> pd.DataFrame:
-    last_error: Exception | None = None
-    for attempt in range(1, DEFAULT_FETCH_RETRIES + 1):
-        try:
-            history = yf.Ticker(symbol).history(
-                start=start_date.isoformat(),
-                end=end_date_exclusive.isoformat(),
-                interval="1d",
-                auto_adjust=True,
-                actions=False,
-                raise_errors=True,
-            )
-            return convert_to_local_layout(history, timezone=market_timezone(code))
-        except Exception as exc:
-            last_error = exc
-            if attempt >= DEFAULT_FETCH_RETRIES:
-                break
-            delay = DEFAULT_FETCH_RETRY_DELAY_SECONDS * attempt
-            print(
-                "FETCH_RETRY "
-                f"code={code} attempt={attempt}/{DEFAULT_FETCH_RETRIES} "
-                f"delay_seconds={delay:.1f} detail={exc}",
-                flush=True,
-            )
-            sleep_time.sleep(delay)
-
-    assert last_error is not None
-    raise RuntimeError(
-        "yfinance daily fetch failed "
-        f"code={code} start={start_date.isoformat()} end={end_date_exclusive.isoformat()} "
-        f"after_attempts={DEFAULT_FETCH_RETRIES} detail={last_error}"
-    ) from last_error
-
-
-def fetch_history_with_fallback(code: str, symbol: str, start_date: date, end_date_exclusive: date) -> pd.DataFrame:
-    try:
-        return fetch_history(code=code, symbol=symbol, start_date=start_date, end_date_exclusive=end_date_exclusive)
-    except RuntimeError as exc:
-        if not code.upper().startswith("HK."):
-            raise
-
-        print(f"FETCH_FALLBACK code={code} source=sina reason={exc}", flush=True)
-        return fetch_history_from_sina(
-            code=code,
-            start_date=start_date,
-            end_date_exclusive=end_date_exclusive,
-            previous_error=exc,
-        )
-
-
-def fetch_history_from_sina(
-    *,
-    code: str,
-    start_date: date,
-    end_date_exclusive: date,
-    previous_error: RuntimeError,
-) -> pd.DataFrame:
-    if ak is None:
-        raise RuntimeError(
-            "sina fallback unavailable because akshare is not installed "
-            f"code={code} start={start_date.isoformat()} end={end_date_exclusive.isoformat()}"
-        ) from previous_error
-
-    raw_symbol = str(code).upper().removeprefix("HK.")
-    if not raw_symbol.isdigit():
-        raise RuntimeError(f"invalid HK symbol for sina fallback code={code}") from previous_error
-
-    symbol = f"{int(raw_symbol):05d}"
-    try:
-        history = ak.stock_hk_daily(symbol=symbol, adjust="")
-    except Exception as exc:
-        raise RuntimeError(
-            "sina daily fetch failed "
-            f"code={code} symbol={symbol} start={start_date.isoformat()} end={end_date_exclusive.isoformat()} detail={exc}"
-        ) from exc
-
-    if history.empty:
-        return pd.DataFrame(columns=LOCAL_COLUMNS)
-
-    history = history.rename(columns={"date": "time_key"})
-    history["time_key"] = pd.to_datetime(history["time_key"]).dt.strftime("%Y-%m-%d 00:00:00")
-    filtered = history.loc[
-        (pd.to_datetime(history["time_key"]).dt.date >= start_date)
-        & (pd.to_datetime(history["time_key"]).dt.date < end_date_exclusive),
-        ["time_key", "open", "close", "high", "low", "volume"],
-    ].copy()
-    filtered["volume"] = pd.to_numeric(filtered["volume"], errors="coerce").fillna(0).astype(int)
-    return filtered.reset_index(drop=True)
-
-
-def convert_to_local_layout(history: pd.DataFrame, *, timezone: ZoneInfo) -> pd.DataFrame:
-    if history.empty:
-        return pd.DataFrame(columns=LOCAL_COLUMNS)
-
-    normalized = history.reset_index().rename(columns=str.lower)
-    if "date" in normalized.columns:
-        normalized = normalized.rename(columns={"date": "time_key"})
-    elif "datetime" in normalized.columns:
-        normalized = normalized.rename(columns={"datetime": "time_key"})
-    required_columns = {"time_key", "open", "close", "high", "low", "volume"}
-    missing = sorted(required_columns - set(normalized.columns))
-    if missing:
-        raise ValueError(f"yfinance response missing required columns: {', '.join(missing)}")
-
-    timestamps = pd.to_datetime(normalized["time_key"])
-    if getattr(timestamps.dt, "tz", None) is not None:
-        timestamps = timestamps.dt.tz_convert(timezone).dt.tz_localize(None)
-    rows = pd.DataFrame(
-        {
-            "time_key": timestamps.dt.strftime("%Y-%m-%d 00:00:00"),
-            "open": pd.to_numeric(normalized["open"], errors="coerce"),
-            "close": pd.to_numeric(normalized["close"], errors="coerce"),
-            "high": pd.to_numeric(normalized["high"], errors="coerce"),
-            "low": pd.to_numeric(normalized["low"], errors="coerce"),
-            "volume": pd.to_numeric(normalized["volume"], errors="coerce").fillna(0).astype(int),
-        }
-    )
-    rows = rows.dropna(subset=["open", "close", "high", "low"]).drop_duplicates(subset=["time_key"], keep="last")
-    return rows.loc[:, LOCAL_COLUMNS].reset_index(drop=True)
 
 
 def merge_weekly_payload(file_path: Path, weekly: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
