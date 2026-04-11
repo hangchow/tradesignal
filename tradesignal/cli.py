@@ -175,7 +175,7 @@ def _root_cause_message(exc: Exception) -> str:
 
 def build_notification_message(config: AppConfig, strategy: StrategyConfig, signal) -> tuple[str, str, str]:
     target_codes = signal.target_codes
-    candidate_codes = signal.candidate_codes
+    candidate_codes = tuple(code for code in signal.candidate_codes if code not in set(target_codes))
     target_summary = _format_code_summary(config, target_codes, empty_value="CASH")
     candidate_summary = _format_code_summary(config, candidate_codes, empty_value="无")
     subject_target_summary = _format_name_summary(config, target_codes, empty_value="CASH")

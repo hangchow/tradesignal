@@ -34,7 +34,11 @@ def load_daily_data(data_root: Path, codes: Sequence[str]) -> tuple[pd.DataFrame
         volume_map[code] = pd.Series(history["volume"].astype(float).to_numpy(), index=trade_dates)
 
         print(
-            f"LOADED code={code} files={len(csv_files)} rows={len(history)} elapsed_seconds={elapsed:.3f}",
+            "LOADED "
+            f"code={code:<10} "
+            f"files={len(csv_files):<3} "
+            f"rows={len(history):<4} "
+            f"elapsed_seconds={elapsed:.3f}",
             flush=True,
         )
 

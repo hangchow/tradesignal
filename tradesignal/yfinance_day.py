@@ -73,14 +73,19 @@ def normalize_symbols(codes: list[str] | tuple[str, ...]) -> list[tuple[str, str
 def resolve_refresh_window(data_root: Path, symbols: list[tuple[str, str]]) -> tuple[date, date]:
     latest_dates: list[tuple[str, date]] = []
     latest_completed_trade_dates: list[date] = []
+    missing_local_history = False
     for code, _ in symbols:
         latest_date = get_latest_local_trade_date(data_root / code)
         if latest_date is not None:
             latest_dates.append((code, latest_date))
+        else:
+            missing_local_history = True
         latest_completed_trade_dates.append(expected_latest_trade_date(code, datetime.now(market_timezone(code))))
 
     latest_completed_trade_date = min(latest_completed_trade_dates)
-    if latest_dates:
+    if missing_local_history:
+        start_date = latest_completed_trade_date - timedelta(days=DEFAULT_BOOTSTRAP_DAYS)
+    elif latest_dates:
         start_date = min(next_trade_date(code, latest_date) for code, latest_date in latest_dates)
     else:
         start_date = latest_completed_trade_date - timedelta(days=DEFAULT_BOOTSTRAP_DAYS)
