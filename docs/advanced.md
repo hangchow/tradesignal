@@ -88,12 +88,14 @@ tail -f /tmp/tradesignal-us-open.stderr.log
 如果你要追溯邮件里的具体数值（例如 `US.GLD` 在 `2026-04-08` 的 `20.4%`），可直接运行：
 
 ```bash
-python scripts/explain_weighted_momentum.py \
+./.venv/bin/python scripts/explain_weighted_momentum.py \
   --config /path/to/tradesignal.json \
   --strategy-config /path/to/strategy_config.json \
   --date 2026-04-08 \
   --code US.GLD
 ```
+
+其中 `--date` 可省略；不传时脚本默认使用“最新已完成交易日”。
 
 脚本会输出：
 

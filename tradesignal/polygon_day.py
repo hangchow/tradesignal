@@ -82,13 +82,18 @@ def normalize_us_symbols(codes: list[str] | tuple[str, ...]) -> list[str]:
 
 def resolve_refresh_window(data_root: Path, symbols: list[str]) -> tuple[date, date]:
     latest_dates: list[date] = []
+    missing_local_history = False
     for symbol in symbols:
         latest_date = get_latest_local_trade_date(data_root / f"US.{symbol}")
         if latest_date is not None:
             latest_dates.append(latest_date)
+        else:
+            missing_local_history = True
 
     latest_completed_trade_date = expected_latest_us_trade_date(datetime.now(NEW_YORK))
-    if latest_dates:
+    if missing_local_history:
+        start_date = latest_completed_trade_date - timedelta(days=DEFAULT_BOOTSTRAP_DAYS)
+    elif latest_dates:
         start_date = next_us_trade_date(min(latest_dates))
     else:
         start_date = latest_completed_trade_date - timedelta(days=DEFAULT_BOOTSTRAP_DAYS)
@@ -148,16 +153,27 @@ def fetch_and_store_history(
     for index, symbol in enumerate(symbols):
         code = f"US.{symbol}"
         output_root = data_root / code
+        symbol_start_date = resolve_symbol_refresh_start_date(
+            data_root=data_root,
+            code=code,
+            fallback_start_date=start_date,
+        )
+        if symbol_start_date > end_date:
+            print(
+                f"FETCH_SKIPPED code={code} start={symbol_start_date.isoformat()} end={end_date.isoformat()} reason=up_to_date",
+                flush=True,
+            )
+            continue
         history = fetch_history(
             symbol=symbol,
-            start_date=start_date,
+            start_date=symbol_start_date,
             end_date=end_date,
             adjusted=True,
             api_key=api_key,
             insecure=insecure,
         )
         if history.empty:
-            print(f"FETCH_EMPTY code={code} start={start_date.isoformat()} end={end_date.isoformat()}", flush=True)
+            print(f"FETCH_EMPTY code={code} start={symbol_start_date.isoformat()} end={end_date.isoformat()}", flush=True)
         else:
             file_count, _ = save_weekly_files(
                 history=history,
@@ -174,6 +190,13 @@ def fetch_and_store_history(
 
         if index + 1 < len(symbols):
             sleep_time.sleep(rate_limit_seconds)
+
+
+def resolve_symbol_refresh_start_date(*, data_root: Path, code: str, fallback_start_date: date) -> date:
+    latest_date = get_latest_local_trade_date(data_root / code)
+    if latest_date is None:
+        return fallback_start_date
+    return max(fallback_start_date, next_us_trade_date(latest_date))
 
 
 def build_url(symbol: str, start_date: date, end_date: date, adjusted: bool, api_key: str) -> str:
