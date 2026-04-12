@@ -19,7 +19,7 @@ from .config import (
 from .data import load_daily_data
 from .emailer import send_email_notification, write_email_preview
 from .strategy.dual_momentum import DualMomentumParams, build_dual_momentum_signal
-from .yfinance_day import refresh_daily_data
+from .daily_history import refresh_daily_data
 
 
 def main(argv: list[str] | None = None) -> int:
