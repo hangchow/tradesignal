@@ -1,36 +1,5 @@
 # tradesignal 进阶说明
 
-## 策略配置
-
-默认策略配置文件是 `config/strategy_config.default.json`。
-不传 `--strategy_config` 时，程序会直接读取这个文件。
-如果这个文件不存在，程序启动会报错。
-
-如果你想自定义策略参数，可以先复制一份：
-
-```bash
-cp config/strategy_config.default.json your_path/strategy_config.json
-```
-
-运行时传入：
-
-```bash
-./.venv/bin/python -m tradesignal --config your_path/tradesignal.us.json --strategy_config your_path/strategy_config.json
-```
-
-你自己的策略配置文件会以 `config/strategy_config.default.json` 为基础，同名参数会覆盖默认值。
-如果只想改少数几个参数，只保留这些参数也可以。
-
-例如只改 `top_n`：
-
-```json
-{
-  "params": {
-    "top_n": 3
-  }
-}
-```
-
 ## 定时运行
 
 最简单是用 `cron`。

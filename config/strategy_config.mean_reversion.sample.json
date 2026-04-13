@@ -1,0 +1,21 @@
+{
+  "name": "mean_reversion",
+  "params": {
+    "mr_window": 20,
+    "entry_z": 1.5,
+    "exit_z": 0.2,
+    "top_n": 1,
+    "volume_window": 20,
+    "min_volume_ratio": 1.0,
+    "use_rsi_filter": true,
+    "rsi_window": 14,
+    "rsi_oversold": 35.0,
+    "use_adf_filter": false,
+    "adf_window": 120,
+    "adf_pvalue_max": 0.1,
+    "market_filter_window": 60,
+    "volatility_window": 20,
+    "target_annual_vol": 0.25,
+    "max_gross_exposure": 1.0
+  }
+}

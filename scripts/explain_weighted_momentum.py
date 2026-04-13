@@ -30,7 +30,7 @@ def main() -> int:
     config = load_config(Path(args.config))
     strategy = load_default_strategy_config()
     if args.strategy_config:
-        strategy = load_strategy_config(Path(args.strategy_config), base=strategy)
+        strategy = load_strategy_config(Path(args.strategy_config))
     params = DualMomentumParams.from_mapping(strategy.params)
     params.validate()
 
