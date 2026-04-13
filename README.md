@@ -32,7 +32,7 @@ cp config/tradesignal.us.sample.json your_path/tradesignal.us.json
 运行 `tradesignal` 时，`--config` 和 `--strategy_config` 都是必传参数。
 
 ```bash
-cp config/strategy_config.default.json your_path/strategy_config.json
+cp config/strategy_config.dual_momentum.json your_path/strategy_config.json
 ```
 
 然后运行：

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-DEFAULT_STRATEGY_CONFIG_RELATIVE_PATH = Path("config/strategy_config.default.json")
+DEFAULT_STRATEGY_CONFIG_RELATIVE_PATH = Path("config/strategy_config.dual_momentum.json")
 DEFAULT_STRATEGY_CONFIG_PATH = (Path(__file__).resolve().parent.parent / DEFAULT_STRATEGY_CONFIG_RELATIVE_PATH).resolve()
 SUPPORTED_STRATEGY_NAMES = frozenset({"dual_momentum", "mean_reversion"})
 
