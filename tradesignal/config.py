@@ -7,6 +7,7 @@ from typing import Any
 
 DEFAULT_STRATEGY_CONFIG_RELATIVE_PATH = Path("config/strategy_config.default.json")
 DEFAULT_STRATEGY_CONFIG_PATH = (Path(__file__).resolve().parent.parent / DEFAULT_STRATEGY_CONFIG_RELATIVE_PATH).resolve()
+SUPPORTED_STRATEGY_NAMES = frozenset({"dual_momentum", "mean_reversion"})
 
 
 @dataclass(frozen=True)
@@ -80,12 +81,10 @@ def load_notification_config(path: str | Path) -> NotificationConfig:
     return _parse_notification_config(payload.get("notification", {}))
 
 
-def load_strategy_config(path: str | Path, *, base: StrategyConfig | None = None) -> StrategyConfig:
+def load_strategy_config(path: str | Path) -> StrategyConfig:
     strategy_config_path = Path(path)
     payload = json.loads(strategy_config_path.read_text(encoding="utf-8"))
-    if base is None:
-        return _parse_strategy_config(payload, prefix="strategy config")
-    return _merge_strategy_config(base, payload, prefix="strategy config")
+    return _parse_strategy_config(payload, prefix="strategy config")
 
 
 def load_default_strategy_config() -> StrategyConfig:
@@ -99,8 +98,8 @@ def _parse_strategy_config(payload: object, *, prefix: str = "strategy") -> Stra
         raise ValueError(f"{prefix} must be an object")
 
     strategy_name = str(payload.get("name", "")).strip()
-    if strategy_name != "dual_momentum":
-        raise ValueError(f"{prefix}.name must be dual_momentum")
+    if strategy_name not in SUPPORTED_STRATEGY_NAMES:
+        raise ValueError(f"{prefix}.name must be one of: {', '.join(sorted(SUPPORTED_STRATEGY_NAMES))}")
 
     strategy_params = payload.get("params", {})
     if strategy_params is None:
@@ -108,27 +107,6 @@ def _parse_strategy_config(payload: object, *, prefix: str = "strategy") -> Stra
     if not isinstance(strategy_params, dict):
         raise ValueError(f"{prefix}.params must be an object")
     return StrategyConfig(name=strategy_name, params=dict(strategy_params))
-
-
-def _merge_strategy_config(base: StrategyConfig, payload: object, *, prefix: str = "strategy") -> StrategyConfig:
-    if payload is None:
-        raise ValueError(f"{prefix} must be an object")
-    if not isinstance(payload, dict):
-        raise ValueError(f"{prefix} must be an object")
-
-    strategy_name = str(payload.get("name", base.name)).strip()
-    if strategy_name != "dual_momentum":
-        raise ValueError(f"{prefix}.name must be dual_momentum")
-
-    override_params = payload.get("params", {})
-    if override_params is None:
-        override_params = {}
-    if not isinstance(override_params, dict):
-        raise ValueError(f"{prefix}.params must be an object")
-
-    merged_params = dict(base.params)
-    merged_params.update(override_params)
-    return StrategyConfig(name=strategy_name, params=merged_params)
 
 
 def _optional_string(value: object) -> str | None:

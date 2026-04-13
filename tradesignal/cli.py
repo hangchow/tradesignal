@@ -8,31 +8,27 @@ from html import escape
 from pathlib import Path
 
 from .config import (
-    DEFAULT_STRATEGY_CONFIG_RELATIVE_PATH,
     AppConfig,
     StrategyConfig,
     load_config,
-    load_default_strategy_config,
     load_notification_config,
     load_strategy_config,
 )
 from .data import load_daily_data
 from .emailer import send_email_notification, write_email_preview
-from .strategy.dual_momentum import DualMomentumParams, build_dual_momentum_signal
+from .strategy.factory import run_strategy_signal
 from .daily_history import refresh_daily_data
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run dual momentum and optionally send an email notification.")
+    parser = argparse.ArgumentParser(description="Run configured strategy and optionally send an email notification.")
     parser.add_argument("--config", required=True, help="Path to JSON config file.")
     parser.add_argument(
         "--strategy-config",
         "--strategy_config",
         dest="strategy_config",
-        help=(
-            "Path to JSON strategy config override. "
-            f"Matching params override defaults from {DEFAULT_STRATEGY_CONFIG_RELATIVE_PATH.as_posix()}."
-        ),
+        required=True,
+        help="Path to JSON strategy config file.",
     )
     parser.add_argument("--no-email", action="store_true", help="Suppress email even if enabled in config.")
     parser.add_argument("--skip-fetch", action="store_true", help="Skip daily data refresh before loading local CSV files.")
@@ -53,11 +49,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def _run(args: argparse.Namespace) -> int:
     config = load_config(Path(args.config))
-    strategy = load_default_strategy_config()
-    if args.strategy_config:
-        strategy = load_strategy_config(Path(args.strategy_config), base=strategy)
-    params = DualMomentumParams.from_mapping(strategy.params)
-    params.validate()
+    strategy = load_strategy_config(Path(args.strategy_config))
 
     print(
         f"RUNNING strategy={strategy.name} market={config.stock_pool.market} codes={len(config.stock_pool.codes)} data_root={config.stock_pool.data_root}",
@@ -66,11 +58,12 @@ def _run(args: argparse.Namespace) -> int:
     if not args.skip_fetch:
         refresh_daily_data(config.stock_pool.data_root, config.stock_pool.codes)
     prices, volumes = load_daily_data(config.stock_pool.data_root, config.stock_pool.codes)
-    signal = build_dual_momentum_signal(prices, volumes, params=params)
+    runtime = run_strategy_signal(strategy.name, strategy.params, prices, volumes)
+    signal = runtime.signal
     if signal is None:
         raise SystemExit(
             "Signal unavailable: not enough completed daily bars for the configured windows. "
-            f"Required warmup bars: {params.required_warmup_bars()}."
+            f"Required warmup bars: {runtime.params.required_warmup_bars()}."
         )
 
     subject, body, html_body = build_notification_message(config, strategy, signal)
