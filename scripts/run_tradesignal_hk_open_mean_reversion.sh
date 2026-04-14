@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PYTHON_BIN="${PROJECT_ROOT}/.venv/bin/python"
 CONFIG_PATH="${HOME}/config/tradesignal_hk.json"
-STRATEGY_CONFIG_PATH="${PROJECT_ROOT}/config/strategy_config.dual_momentum.json"
+STRATEGY_CONFIG_PATH="${PROJECT_ROOT}/config/strategy_config.mean_reversion.json"
 GIT_PULL_LOCKDIR="/tmp/tradesignal-git-pull.lock"
 
 cd "${PROJECT_ROOT}"

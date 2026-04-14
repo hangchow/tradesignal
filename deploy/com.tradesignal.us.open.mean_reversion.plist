@@ -3,12 +3,12 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.tradesignal.us.open</string>
+  <string>com.tradesignal.us.open.mean_reversion</string>
 
   <key>ProgramArguments</key>
   <array>
     <string>/bin/zsh</string>
-    <string>/ABSOLUTE/PATH/TO/tradesignal/scripts/run_tradesignal_us_open.sh</string>
+    <string>/ABSOLUTE/PATH/TO/tradesignal/scripts/run_tradesignal_us_open_mean_reversion.sh</string>
   </array>
 
   <key>WorkingDirectory</key>
@@ -20,13 +20,13 @@
       <key>Hour</key>
       <integer>21</integer>
       <key>Minute</key>
-      <integer>35</integer>
+      <integer>38</integer>
     </dict>
     <dict>
       <key>Hour</key>
       <integer>22</integer>
       <key>Minute</key>
-      <integer>35</integer>
+      <integer>38</integer>
     </dict>
   </array>
 
@@ -34,9 +34,9 @@
   <false/>
 
   <key>StandardOutPath</key>
-  <string>/tmp/tradesignal-us-open.stdout.log</string>
+  <string>/tmp/tradesignal-us-open-mean-reversion.stdout.log</string>
 
   <key>StandardErrorPath</key>
-  <string>/tmp/tradesignal-us-open.stderr.log</string>
+  <string>/tmp/tradesignal-us-open-mean-reversion.stderr.log</string>
 </dict>
 </plist>

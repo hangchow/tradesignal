@@ -5,8 +5,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PYTHON_BIN="${PROJECT_ROOT}/.venv/bin/python"
-CONFIG_PATH="${HOME}/config/tradesignal_hk.json"
-STRATEGY_CONFIG_PATH="${PROJECT_ROOT}/config/strategy_config.dual_momentum.json"
+CONFIG_PATH="${HOME}/config/tradesignal_us.json"
+STRATEGY_CONFIG_PATH="${PROJECT_ROOT}/config/strategy_config.mean_reversion.json"
 GIT_PULL_LOCKDIR="/tmp/tradesignal-git-pull.lock"
 
 cd "${PROJECT_ROOT}"
@@ -46,17 +46,17 @@ from zoneinfo import ZoneInfo
 
 import exchange_calendars as xcals
 
-calendar = xcals.get_calendar("XHKG")
-now_hk = datetime.now(ZoneInfo("Asia/Hong_Kong"))
-session_date = now_hk.date()
+calendar = xcals.get_calendar("XNYS")
+now_ny = datetime.now(ZoneInfo("America/New_York"))
+session_date = now_ny.date()
 
 if not calendar.is_session(session_date):
     raise SystemExit(1)
 
-session_open = calendar.session_open(session_date).tz_convert("Asia/Hong_Kong").to_pydatetime()
+session_open = calendar.session_open(session_date).tz_convert("America/New_York").to_pydatetime()
 window_end = session_open + timedelta(minutes=45)
 
-if not (session_open <= now_hk < window_end):
+if not (session_open <= now_ny < window_end):
     raise SystemExit(1)
 PY
 then

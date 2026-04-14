@@ -14,7 +14,9 @@
 
 如果你在 macOS 上长期运行，推荐用 `launchd`，这样开机后也能自动按计划触发。
 
-例如项目目录是 `/Volumes/workspace/workspace/tradesignal`，配置文件是 `~/config/tradesignal_us.json`，可以直接使用仓库里的这两个文件：
+仓库里的 `plist` 文件是模板，里面的 `/ABSOLUTE/PATH/TO/tradesignal` 需要先替换成你自己的项目绝对路径。
+
+例如项目目录是 `/path/to/tradesignal`，配置文件是 `~/config/tradesignal_us.json`，可以直接使用仓库里的这两个文件：
 
 - `scripts/run_tradesignal_us_open.sh`
 - `deploy/com.tradesignal.us.open.plist`
@@ -31,7 +33,10 @@
 
 ```bash
 mkdir -p ~/Library/LaunchAgents
-cp deploy/com.tradesignal.us.open.plist ~/Library/LaunchAgents/
+sed "s#/ABSOLUTE/PATH/TO/tradesignal#/path/to/tradesignal#g" \
+  deploy/com.tradesignal.us.open.plist \
+  > ~/Library/LaunchAgents/com.tradesignal.us.open.plist
+plutil -lint ~/Library/LaunchAgents/com.tradesignal.us.open.plist
 launchctl unload ~/Library/LaunchAgents/com.tradesignal.us.open.plist 2>/dev/null || true
 launchctl load ~/Library/LaunchAgents/com.tradesignal.us.open.plist
 launchctl start com.tradesignal.us.open
@@ -51,6 +56,27 @@ tail -f /tmp/tradesignal-us-open.stderr.log
 
 这套配置会在机器本地时间 `09:35` 触发，再由脚本用 `XHKG` 交易日历判断是否是港股交易日，因此周末和香港休市日会自动跳过。
 脚本启动后会先执行一次 `git pull --ff-only origin main`，然后再运行策略。
+
+如果你还要并行发送 `mean_reversion` 策略，可以使用这两组附加任务：
+
+- `scripts/run_tradesignal_us_open_mean_reversion.sh`
+- `deploy/com.tradesignal.us.open.mean_reversion.plist`
+- `scripts/run_tradesignal_hk_open_mean_reversion.sh`
+- `deploy/com.tradesignal.hk.open.mean_reversion.plist`
+
+它们默认和 `dual_momentum` 错开 3 分钟触发：
+
+- 美股：`21:38` / `22:38`
+- 港股：`09:38`
+
+安装方式与上面相同，先把对应 `plist` 里的 `/ABSOLUTE/PATH/TO/tradesignal` 替换成你自己的项目绝对路径，再加载到 `~/Library/LaunchAgents/`。
+
+日志文件也单独拆分：
+
+- `/tmp/tradesignal-us-open-mean-reversion.stdout.log`
+- `/tmp/tradesignal-us-open-mean-reversion.stderr.log`
+- `/tmp/tradesignal-hk-open-mean-reversion.stdout.log`
+- `/tmp/tradesignal-hk-open-mean-reversion.stderr.log`
 
 ## 复盘某一天“加权动量”具体数字
 

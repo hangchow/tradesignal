@@ -13,6 +13,7 @@ dependencies = [
     "pandas",
     "yfinance",
     "akshare",
+    "PySocks",
 ]
 
 [project.scripts]

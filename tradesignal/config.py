@@ -15,6 +15,8 @@ class EmailNotificationConfig:
     enabled: bool = False
     smtp_host: str | None = None
     smtp_port: int = 587
+    smtp_proxy_host: str | None = None
+    smtp_proxy_port: int | None = None
     username: str | None = None
     password: str | None = None
     password_env: str | None = None
@@ -178,6 +180,8 @@ def _parse_notification_config(notification_raw: object) -> NotificationConfig:
         enabled=bool(email_raw.get("enabled", False)),
         smtp_host=_optional_string(email_raw.get("smtp_host")),
         smtp_port=int(email_raw.get("smtp_port", 587)),
+        smtp_proxy_host=_optional_string(email_raw.get("smtp_proxy_host")),
+        smtp_proxy_port=int(email_raw.get("smtp_proxy_port")) if email_raw.get("smtp_proxy_port") is not None else None,
         username=_optional_string(email_raw.get("username")),
         password=_optional_string(email_raw.get("password")),
         password_env=_optional_string(email_raw.get("password_env")),

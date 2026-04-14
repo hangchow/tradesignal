@@ -18,6 +18,7 @@ from .config import EmailNotificationConfig
 
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "output"
 ASIA_SHANGHAI = ZoneInfo("Asia/Shanghai")
+SMTP_TIMEOUT_SECONDS = 90
 
 
 def send_email_notification(config: EmailNotificationConfig, *, subject: str, body: str, html_body: str) -> None:
@@ -54,8 +55,7 @@ def send_email_notification(config: EmailNotificationConfig, *, subject: str, bo
 
 
 def _send_message_once(config: EmailNotificationConfig, *, password: str, message: EmailMessage) -> None:
-    smtp_factory = smtplib.SMTP_SSL if config.use_ssl else smtplib.SMTP
-    with smtp_factory(config.smtp_host, config.smtp_port, timeout=30) as smtp:
+    with _build_smtp_client(config) as smtp:
         smtp.ehlo()
         if config.use_tls and not config.use_ssl:
             smtp.starttls()
@@ -63,6 +63,79 @@ def _send_message_once(config: EmailNotificationConfig, *, password: str, messag
         if config.username:
             smtp.login(config.username, password)
         smtp.send_message(message)
+
+
+def _build_smtp_client(config: EmailNotificationConfig):
+    if not config.smtp_proxy_host:
+        smtp_factory = smtplib.SMTP_SSL if config.use_ssl else smtplib.SMTP
+        return smtp_factory(config.smtp_host, config.smtp_port, timeout=SMTP_TIMEOUT_SECONDS)
+
+    if config.smtp_proxy_port is None:
+        raise ValueError("notification.email.smtp_proxy_port is required when smtp_proxy_host is set")
+
+    smtp_factory = _ProxySMTP_SSL if config.use_ssl else _ProxySMTP
+    return smtp_factory(
+        config.smtp_host,
+        config.smtp_port,
+        timeout=SMTP_TIMEOUT_SECONDS,
+        proxy_host=config.smtp_proxy_host,
+        proxy_port=config.smtp_proxy_port,
+    )
+
+
+def _create_proxy_socket(*, host: str, port: int, timeout: float | None, proxy_host: str, proxy_port: int):
+    try:
+        import socks
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("PySocks is required when notification.email.smtp_proxy_host is configured") from exc
+
+    if timeout is not None and timeout <= 0:
+        raise ValueError("Non-blocking sockets are not supported for proxied SMTP connections")
+
+    return socks.create_connection(
+        (host, port),
+        timeout=timeout,
+        proxy_type=socks.SOCKS5,
+        proxy_addr=proxy_host,
+        proxy_port=proxy_port,
+    )
+
+
+class _ProxySMTP(smtplib.SMTP):
+    def __init__(self, *args, proxy_host: str, proxy_port: int, **kwargs):
+        self._proxy_host = proxy_host
+        self._proxy_port = proxy_port
+        super().__init__(*args, **kwargs)
+
+    def _get_socket(self, host, port, timeout):
+        if self.debuglevel > 0:
+            self._print_debug("connect via socks5 proxy", (self._proxy_host, self._proxy_port))
+        return _create_proxy_socket(
+            host=host,
+            port=port,
+            timeout=timeout,
+            proxy_host=self._proxy_host,
+            proxy_port=self._proxy_port,
+        )
+
+
+class _ProxySMTP_SSL(smtplib.SMTP_SSL):
+    def __init__(self, *args, proxy_host: str, proxy_port: int, **kwargs):
+        self._proxy_host = proxy_host
+        self._proxy_port = proxy_port
+        super().__init__(*args, **kwargs)
+
+    def _get_socket(self, host, port, timeout):
+        if self.debuglevel > 0:
+            self._print_debug("connect via socks5 proxy", (self._proxy_host, self._proxy_port))
+        proxied_socket = _create_proxy_socket(
+            host=host,
+            port=port,
+            timeout=timeout,
+            proxy_host=self._proxy_host,
+            proxy_port=self._proxy_port,
+        )
+        return self.context.wrap_socket(proxied_socket, server_hostname=self._host)
 
 
 def write_email_preview(config: EmailNotificationConfig, *, subject: str, body: str, html_body: str) -> Path:

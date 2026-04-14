@@ -25,6 +25,10 @@ cp config/tradesignal.us.sample.json your_path/tradesignal.us.json
 
 邮件密码可以直接写在 `notification.email.password` 里。
 如果不想发邮件，把 `notification.email.enabled` 改成 `false`。
+如果本机访问 Gmail 需要走本地 SOCKS5 代理，可额外配置：
+
+- `notification.email.smtp_proxy_host`
+- `notification.email.smtp_proxy_port`
 
 
 ## 策略配置（必传）

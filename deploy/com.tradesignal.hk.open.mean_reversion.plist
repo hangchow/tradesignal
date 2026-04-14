@@ -3,12 +3,12 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.tradesignal.hk.open</string>
+  <string>com.tradesignal.hk.open.mean_reversion</string>
 
   <key>ProgramArguments</key>
   <array>
     <string>/bin/zsh</string>
-    <string>/ABSOLUTE/PATH/TO/tradesignal/scripts/run_tradesignal_hk_open.sh</string>
+    <string>/ABSOLUTE/PATH/TO/tradesignal/scripts/run_tradesignal_hk_open_mean_reversion.sh</string>
   </array>
 
   <key>WorkingDirectory</key>
@@ -19,16 +19,16 @@
     <key>Hour</key>
     <integer>9</integer>
     <key>Minute</key>
-    <integer>35</integer>
+    <integer>38</integer>
   </dict>
 
   <key>RunAtLoad</key>
   <false/>
 
   <key>StandardOutPath</key>
-  <string>/tmp/tradesignal-hk-open.stdout.log</string>
+  <string>/tmp/tradesignal-hk-open-mean-reversion.stdout.log</string>
 
   <key>StandardErrorPath</key>
-  <string>/tmp/tradesignal-hk-open.stderr.log</string>
+  <string>/tmp/tradesignal-hk-open-mean-reversion.stderr.log</string>
 </dict>
 </plist>
